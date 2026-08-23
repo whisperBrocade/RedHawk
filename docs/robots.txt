@@ -1,0 +1,7 @@
+# RedHawk 红隼 — robots.txt
+# 允许所有搜索引擎爬虫收录本站（含 Google / Bing / 百度等）
+
+User-agent: *
+Allow: /
+
+Sitemap: https://whisperbrocade.github.io/RedHawk/sitemap.xml
