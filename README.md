@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-119%20passed-green.svg)](src/tests)
+[![Tests](https://img.shields.io/badge/tests-123%20passed-green.svg)](src/tests)
 [![Platform](https://img.shields.io/badge/Platform-Windows-blue.svg)](https://www.microsoft.com/windows)
 [![Security](https://img.shields.io/badge/Scope-Authorized_Only-red.svg)](#-免责声明)
 
@@ -43,7 +43,7 @@ RedHawk 是一款**面向授权安全测试的 AI 一体化工作台**：
 | 🔒 **HTTPS 解密** | 自签 CA + 动态域名证书中间人（Burp 同方案） |
 | 🗂 **流量归类** | 按 Content-Type/URL 自动分组（HTML/API/JS/图片...） |
 | ⚡ **一键全自动** | 流量 → AI 识别漏洞 → 深度研判 → 复现报告，一次点击 |
-| 🖥 **独立桌面版** | 27MB 单 exe，脱离浏览器（pywebview 内嵌窗口） |
+| 🖥 **独立桌面版** | 31MB 单 exe，脱离浏览器（pywebview 内嵌窗口） |
 | 🎨 **三主题 UI** | 白色 / 暖色 / 红黑，图标随主题变色 |
 | 🔌 **插件化** | YAML playbook 加流程 = 加文件；工具适配器 JSON 统一契约 |
 
@@ -140,7 +140,7 @@ src/
 │   ├── repro.py          # 漏洞复现报告
 │   ├── desktop.py        # 独立桌面版入口
 │   └── static/index.html # 前端工作台
-└── tests/                # 119 个单元测试
+└── tests/                # 123 个单元测试
 ```
 
 ---
@@ -158,7 +158,7 @@ src/
 ```bash
 cd src
 python -m pytest tests/ -v
-# 119 passed, 1 skipped
+# 123 passed, 1 skipped
 ```
 
 ---
