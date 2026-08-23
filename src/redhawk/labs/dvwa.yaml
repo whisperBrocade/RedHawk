@@ -1,0 +1,9 @@
+# RedHawk 靶场：DVWA（SQLi/XSS/CSRF/文件上传 全套练习）
+# 访问: http://127.0.0.1:4280  默认 admin/password
+services:
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: redhawk-dvwa
+    ports:
+      - "4280:80"
+    restart: unless-stopped

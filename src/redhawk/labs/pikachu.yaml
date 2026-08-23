@@ -1,0 +1,9 @@
+# RedHawk 靶场：Pikachu（皮卡丘，中文教学靶场，注入/XSS/RCE 全套）
+# 访问: http://127.0.0.1:4281
+services:
+  pikachu:
+    image: registry.cn-hangzhou.aliyuncs.com/zhuifengshaonian/pikachu:latest
+    container_name: redhawk-pikachu
+    ports:
+      - "4281:80"
+    restart: unless-stopped

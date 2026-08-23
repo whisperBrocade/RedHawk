@@ -1,0 +1,12 @@
+# RedHawk AI 应用安全检测 playbook
+# 结合 ai-security-tool-architecture：检测 AI 应用自身安全
+# 用法：rh scan-run --template ai_app_scan（目标填 AI 接口 URL）
+name: ai_app_scan
+description: AI 应用安全检测：Prompt 注入/越狱/提示词泄露/鉴权
+version: 1.0
+
+stages:
+  - phase: scan
+    tool: ai_app_scan
+    options:
+      timeout: 300

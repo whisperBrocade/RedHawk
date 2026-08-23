@@ -1,0 +1,181 @@
+{
+  "name": "redhawk-plugins",
+  "version": "1.0.0",
+  "tools": [
+    {
+      "key": "fscan",
+      "name": "fscan",
+      "category": "recon",
+      "runtime": "binary",
+      "adapter": "FscanAdapter",
+      "description": "内网/资产快扫（端口+服务+弱口令+常见漏洞）",
+      "install": {
+        "type": "github_release",
+        "repo": "shadow1ng/fscan",
+        "asset": "fscan_2.2.0_windows_x64.exe",
+        "rename": "fscan.exe",
+        "url": "https://github.com/shadow1ng/fscan/releases/download/v2.2.0/fscan_2.2.0_windows_x64.exe"
+      },
+      "sha256": "5aefcbfa98b8e8814dc415a87e4e7e8716004048857d80b37f03e600b6fd2441"
+    },
+    {
+      "key": "nuclei",
+      "name": "nuclei",
+      "category": "scan",
+      "runtime": "binary",
+      "adapter": "NucleiAdapter",
+      "description": "模板化漏洞验证（数千 POC）",
+      "install": {
+        "type": "github_release_zip",
+        "repo": "projectdiscovery/nuclei",
+        "asset": "nuclei_3.11.1_windows_amd64.zip",
+        "binary_in_zip": "nuclei.exe",
+        "url": "https://github.com/projectdiscovery/nuclei/releases/download/v3.11.1/nuclei_3.11.1_windows_amd64.zip"
+      },
+      "sha256": "",
+      "post_install": ["nuclei", "-update-templates"]
+    },
+    {
+      "key": "subfinder",
+      "name": "subfinder",
+      "category": "recon",
+      "runtime": "binary",
+      "adapter": "SubfinderAdapter",
+      "description": "子域名枚举（被动聚合 + 暴力）",
+      "install": {
+        "type": "github_release_zip",
+        "repo": "projectdiscovery/subfinder",
+        "asset": "subfinder_2.16.0_windows_amd64.zip",
+        "binary_in_zip": "subfinder.exe",
+        "url": "https://github.com/projectdiscovery/subfinder/releases/download/v2.16.0/subfinder_2.16.0_windows_amd64.zip"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "httpx",
+      "name": "httpx",
+      "category": "recon",
+      "runtime": "binary",
+      "adapter": "HttpxAdapter",
+      "description": "存活探测 + 指纹识别（万级 URL 秒级）",
+      "install": {
+        "type": "github_release_zip",
+        "repo": "projectdiscovery/httpx",
+        "asset": "httpx_1.10.0_windows_amd64.zip",
+        "binary_in_zip": "httpx.exe",
+        "url": "https://github.com/projectdiscovery/httpx/releases/download/v1.10.0/httpx_1.10.0_windows_amd64.zip"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "ffuf",
+      "name": "ffuf",
+      "category": "recon",
+      "runtime": "binary",
+      "adapter": "FfufAdapter",
+      "description": "目录/参数暴力枚举（Go 极速）",
+      "install": {
+        "type": "github_release_zip",
+        "repo": "ffuf/ffuf",
+        "asset": "ffuf_2.2.1_windows_amd64.zip",
+        "binary_in_zip": "ffuf.exe",
+        "url": "https://github.com/ffuf/ffuf/releases/download/v2.2.1/ffuf_2.2.1_windows_amd64.zip"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "sqlmap",
+      "name": "sqlmap",
+      "category": "exploit",
+      "runtime": "python",
+      "adapter": "SqlmapAdapter",
+      "description": "SQL 注入自动检测与利用",
+      "install": {
+        "type": "pip",
+        "package": "sqlmap"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "xray",
+      "name": "xray",
+      "category": "scan",
+      "runtime": "binary",
+      "adapter": "XrayAdapter",
+      "description": "被动漏洞扫描（浏览器流量全过检）",
+      "install": {
+        "type": "manual",
+        "note": "xray 需手动下载（社区版）：https://github.com/chaitin/xray 或 chaitin 官网"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "hydra",
+      "name": "hydra",
+      "category": "brute",
+      "runtime": "binary",
+      "adapter": "HydraAdapter",
+      "description": "口令爆破（50+ 协议）",
+      "install": {
+        "type": "manual",
+        "note": "hydra 需手动安装（Windows 社区构建版）"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "nmap",
+      "name": "nmap",
+      "category": "recon",
+      "runtime": "binary",
+      "adapter": "NmapAdapter",
+      "description": "端口服务识别（-p- -sV）",
+      "install": {
+        "type": "manual",
+        "note": "nmap 需手动安装：https://nmap.org/download.html"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "rad",
+      "name": "rad",
+      "category": "recon",
+      "runtime": "binary",
+      "adapter": "RadAdapter",
+      "description": "爬虫（配合 xray 被动扫描）",
+      "install": {
+        "type": "github_release_zip",
+        "repo": "chaitin/rad",
+        "asset": "rad_windows_amd64.zip",
+        "binary_in_zip": "rad.exe",
+        "url": "https://github.com/chaitin/rad/releases/download/1.0/rad_windows_amd64.zip"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "goby",
+      "name": "Goby",
+      "category": "scan",
+      "runtime": "gui",
+      "adapter": "ManualAdapter",
+      "description": "综合测绘+漏洞扫描 GUI（1500 POC 版）",
+      "install": {
+        "type": "manual",
+        "note": "G盘蚁景工具包已有 Goby(1500POC).zip"
+      },
+      "sha256": ""
+    },
+    {
+      "key": "burpsuite",
+      "name": "BurpSuite",
+      "category": "proxy",
+      "runtime": "gui",
+      "adapter": "ManualAdapter",
+      "description": "Web 抓包/重放/扫描",
+      "install": {
+        "type": "manual",
+        "note": "G盘蚁景工具包已有 BurpSuite 2023/2025"
+      },
+      "sha256": ""
+    }
+  ]
+}

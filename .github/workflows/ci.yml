@@ -1,0 +1,108 @@
+# RedHawk CI — 测试 + 打包
+# 触发：push / PR 到 main
+# 工作流：① 单元测试（119 个）② PyInstaller 打包 exe ③ 上传产物
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:        # 手动触发
+
+jobs:
+  test:
+    name: 单元测试 (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: 安装依赖
+        run: |
+          pip install --upgrade pip
+          pip install typer pyyaml fastapi uvicorn pywebview cryptography pytest
+
+      - name: 安装本项目
+        working-directory: src
+        run: pip install -e .
+
+      - name: 运行单元测试
+        working-directory: src
+        run: python -m pytest tests/ -v --tb=short
+
+      # Windows 特有能力验证（不影响测试结果，仅记录）
+      - name: 验证核心模块可导入
+        working-directory: src
+        run: python -c "from redhawk import web, intercept, certgen, llm, auto_pentest; print('core modules OK')"
+
+  build:
+    name: 打包 Windows exe
+    needs: test
+    runs-on: windows-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 安装依赖
+        run: |
+          pip install --upgrade pip
+          pip install typer pyyaml fastapi uvicorn pywebview cryptography pyinstaller
+
+      - name: 安装本项目
+        working-directory: src
+        run: pip install -e .
+
+      - name: PyInstaller 打包
+        working-directory: src
+        run: |
+          python -m PyInstaller redhawk.spec --noconfirm --clean
+
+      - name: 验证产物
+        working-directory: src/dist
+        run: |
+          if (Test-Path RedHawk.exe) { Write-Host "RedHawk.exe OK, $((Get-Item RedHawk.exe).Length / 1MB) MB" }
+          else { Write-Error "RedHawk.exe 未生成" }
+
+      - name: 上传打包产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: RedHawk-windows-exe
+          path: src/dist/RedHawk.exe
+          if-no-files-found: error
+
+  release:
+    name: 创建 Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 下载 exe 产物
+        uses: actions/download-artifact@v4
+        with:
+          name: RedHawk-windows-exe
+          path: dist/
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/RedHawk.exe
+          generate_release_notes: true

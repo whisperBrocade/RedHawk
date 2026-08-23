@@ -1,0 +1,55 @@
+# -*- mode: python ; coding: utf-8 -*-
+# RedHawk 独立版打包配置
+# 用法: pyinstaller redhawk.spec
+
+import os
+
+ROOT = os.path.dirname(os.path.abspath("redhawk.spec"))
+
+a = Analysis(
+    [os.path.join(ROOT, "redhawk", "desktop.py")],
+    pathex=[ROOT],
+    binaries=[],
+    datas=[
+        # 静态前端 + playbooks + 插件清单 + labs compose
+        (os.path.join(ROOT, "redhawk", "static"), "redhawk/static"),
+        (os.path.join(ROOT, "redhawk", "playbooks"), "redhawk/playbooks"),
+        (os.path.join(ROOT, "redhawk", "plugins", "manifest.json"), "redhawk/plugins"),
+        (os.path.join(ROOT, "redhawk", "labs"), "redhawk/labs"),
+    ],
+    hiddenimports=[
+        "redhawk.web", "redhawk.cli", "redhawk.db", "redhawk.gatekeeper",
+        "redhawk.orchestrator", "redhawk.playbook", "redhawk.ai_service",
+        "redhawk.ai_guard", "redhawk.report", "redhawk.repro",
+        "redhawk.intercept", "redhawk.kb", "redhawk.llm", "redhawk.dicts",
+        "redhawk.labs", "redhawk.plugins.registry", "redhawk.desktop",
+        "redhawk.adapters", "redhawk.adapters.fscan", "redhawk.adapters.nuclei",
+        "redhawk.adapters.subfinder", "redhawk.adapters.httpx",
+        "redhawk.adapters.ffuf", "redhawk.adapters.sqlmap",
+        "redhawk.adapters.xray", "redhawk.adapters.ai_app_scan",
+        "uvicorn", "uvicorn.logging", "uvicorn.loops", "uvicorn.loops.auto",
+        "uvicorn.protocols", "uvicorn.protocols.http", "uvicorn.protocols.http.auto",
+        "uvicorn.protocols.websockets", "uvicorn.protocols.websockets.auto",
+        "uvicorn.lifespan", "uvicorn.lifespan.on",
+    ],
+    excludes=["tkinter", "PyQt5", "PySide2", "matplotlib", "numpy", "pandas"],
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.datas,
+    [],
+    name="RedHawk",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,  # 无控制台窗口（独立软件）
+    icon=os.path.join(ROOT, "..", "redhawk.ico") if os.path.exists(os.path.join(ROOT, "..", "redhawk.ico")) else None,)

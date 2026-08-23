@@ -1,0 +1,1239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>REDHAWK // 红隼</title>
+<style>
+  /* ===== 双主题（CSS 变量，图标用 currentColor 跟随主题） ===== */
+  :root {
+    --red: #e03131;
+    --amber: #e8590c;
+  }
+  body.theme-light {
+    --bg: #f5f4f0;
+    --panel: #ffffff;
+    --card: #faf9f6;
+    --line: #e4e1d8;
+    --text: #22201c;
+    --dim: #8a857a;
+    --accent: #e03131;
+    --accent-soft: rgba(224,49,49,.08);
+    --accent-glow: rgba(224,49,49,.15);
+    --shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 14px rgba(0,0,0,.05);
+    --watermark: rgba(224,49,49,.05);
+  }
+  body.theme-warm {
+    --bg: #faf3e4;
+    --panel: #fffaf0;
+    --card: #fdf5e6;
+    --line: #ead9bd;
+    --text: #3b2f1e;
+    --dim: #9c8462;
+    --accent: #c2550f;
+    --accent-soft: rgba(194,85,15,.09);
+    --accent-glow: rgba(194,85,15,.16);
+    --shadow: 0 1px 3px rgba(0,0,0,.05), 0 4px 16px rgba(160,100,30,.08);
+    --watermark: rgba(194,85,15,.06);
+  }
+  body.theme-dark {
+    --bg: #0c0c0c;
+    --panel: #151515;
+    --card: #1a1a1a;
+    --line: #2c2c2c;
+    --text: #e8e8e8;
+    --dim: #9a9a9a;
+    --accent: #ff1a1a;
+    --accent-soft: rgba(255,26,26,.12);
+    --accent-glow: rgba(255,26,26,.25);
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 4px 16px rgba(255,26,26,.07);
+    --watermark: rgba(255,26,26,.06);
+    --mono: "Cascadia Code", Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; display: flex;
+    transition: background .3s ease, color .3s ease;
+  }
+  body.theme-dark {
+    background:
+      radial-gradient(ellipse at 18% -5%, rgba(255,26,26,.14), transparent 52%),
+      radial-gradient(ellipse at 85% 12%, rgba(255,140,26,.06), transparent 44%),
+      linear-gradient(180deg, #200404 0%, #0c0c0c 40%);
+  }
+
+  /* ===== 背景水印（略微显现的红隼） ===== */
+  .watermark {
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .watermark svg { width: 520px; height: auto; opacity: 1; }
+
+  /* ===== 左侧栏（简洁） ===== */
+  .sidebar {
+    width: 168px; flex-shrink: 0; z-index: 2;
+    background: var(--panel); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column;
+    box-shadow: 1px 0 8px rgba(0,0,0,.04);
+  }
+  .brand {
+    padding: 18px 14px; display: flex; align-items: center; gap: 9px;
+    border-bottom: 1px solid var(--line);
+  }
+  .brand svg { width: 26px; height: 26px; color: var(--accent); }
+  .brand b { font-size: 15px; letter-spacing: 1px; font-weight: 800; }
+  .brand b span { color: var(--accent); }
+  nav { flex: 1; padding: 10px 8px; }
+  .nav-group { padding: 12px 10px 5px; font-size: 10px; letter-spacing: 3px; color: var(--dim); opacity: .7; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 10px; margin-bottom: 2px; cursor: pointer;
+    color: var(--dim); font-size: 13px; letter-spacing: .5px;
+    border: none; background: none; text-align: left; border-radius: 8px;
+    transition: all .15s ease;
+  }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; color: var(--dim); }
+  .nav-item:hover { color: var(--text); background: var(--accent-soft); }
+  .nav-item:hover svg { color: var(--accent); }
+  .nav-item.active { color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+  .nav-item.active svg { color: var(--accent); }
+  .sidebar .theme-box { padding: 12px 10px; border-top: 1px solid var(--line); display: flex; gap: 6px; }
+  .theme-btn {
+    flex: 1; padding: 7px 4px; cursor: pointer; font-size: 11.5px;
+    border: 1px solid var(--line); background: var(--card); color: var(--dim);
+    border-radius: 8px; transition: all .15s ease;
+  }
+  .theme-btn.active { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+
+  /* ===== 主区 ===== */
+  .main { flex: 1; padding: 22px; z-index: 1; max-width: 1200px; }
+  .view-title { font-size: 20px; font-weight: 800; margin-bottom: 4px; letter-spacing: 1px; }
+  .view-desc { font-size: 12.5px; color: var(--dim); margin-bottom: 18px; }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 18px 20px; margin-bottom: 14px;
+    box-shadow: var(--shadow);
+  }
+  .panel h3 { font-size: 13px; letter-spacing: 1px; margin-bottom: 12px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .panel h3 svg { width: 15px; height: 15px; color: var(--accent); }
+  label { display: block; font-size: 11.5px; color: var(--dim); margin: 9px 0 4px; }
+  input, select, textarea {
+    width: 100%; padding: 8px 11px;
+    background: var(--card); border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; font-size: 13px; font-family: inherit;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-glow); }
+  textarea { resize: vertical; min-height: 72px; }
+  .btn {
+    display: inline-block; padding: 8px 18px; margin: 8px 6px 0 0; cursor: pointer;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    font-size: 13px; font-weight: 700; transition: opacity .15s ease, transform .1s ease;
+  }
+  .btn:hover { opacity: .88; transform: translateY(-1px); }
+  .btn.ghost { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+  .btn.small { padding: 4px 10px; font-size: 11.5px; margin-top: 0; border-radius: 6px; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+  .msg { font-size: 12px; margin-top: 8px; }
+  .msg.ok { color: #2f9e44; } .msg.err { color: var(--accent); }
+  .hidden { display: none; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th { text-align: left; color: var(--dim); font-weight: 600; padding: 8px 9px; border-bottom: 1px solid var(--line); font-size: 11.5px; letter-spacing: .5px; }
+  td { padding: 8px 9px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:hover td { background: var(--accent-soft); }
+  .sev { font-weight: 700; padding: 2px 8px; font-size: 10.5px; border-radius: 5px; }
+  .sev.critical { background: #e0313122; color: var(--accent); }
+  .sev.high { background: #e8590c22; color: #d9480f; }
+  .sev.medium { background: #e9a92022; color: #b08900; }
+  .sev.low { background: #2f9e4422; color: #2b8a3e; }
+  .sev.info { background: #88888822; color: var(--dim); }
+  .mono-pre {
+    background: var(--card); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px; font-size: 12px; line-height: 1.65; white-space: pre-wrap; word-break: break-all;
+    max-height: 420px; overflow-y: auto; font-family: "Cascadia Code", Consolas, monospace;
+  }
+  .split { display: flex; gap: 12px; }
+  .split > div { flex: 1; min-width: 0; }
+  .action-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; }
+  .action-row input { flex: 1; min-width: 140px; }
+  .progress-bar { height: 5px; background: var(--card); border: 1px solid var(--line); border-radius: 4px; margin: 10px 0; overflow: hidden; }
+  .progress-bar .fill { height: 100%; background: var(--accent); width: 0%; transition: width .4s ease; }
+  .badge { font-size: 10px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 5px; color: var(--dim); }
+  .traffic-row { cursor: pointer; }
+  .empty { color: var(--dim); text-align: center; padding: 22px 0; font-size: 12.5px; }
+  .req-c { color: var(--accent); }
+  .resp-c { color: #2f9e44; }
+  .warn-note {
+    font-size: 12px; color: var(--dim); background: var(--card);
+    border: 1px dashed var(--line); border-radius: 8px; padding: 10px 14px; margin-bottom: 12px;
+  }
+  .flex-h { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+</style>
+</head>
+<body class="theme-warm">
+
+<!-- 背景水印：略微显现的红隼 -->
+<div class="watermark">
+  <svg viewBox="0 0 220 130" xmlns="http://www.w3.org/2000/svg">
+    <g fill="currentColor">
+      <path d="M110 8 L150 40 L196 34 L166 58 L202 72 L156 74 L176 96 L110 84 L44 96 L64 74 L18 72 L54 58 L24 34 L70 40 Z"/>
+      <circle cx="110" cy="24" r="10"/>
+      <path d="M92 92 L110 126 L128 92 L122 104 L110 112 L98 104 Z"/>
+    </g>
+  </svg>
+</div>
+
+<!-- ===== 左侧栏 ===== -->
+<aside class="sidebar">
+  <div class="brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M12 2 L15 8 L21 7 L17 12 L21 17 L14 16 L12 22 L10 16 L3 17 L7 12 L3 7 L9 8 Z" fill="currentColor" stroke="none"/>
+    </svg>
+    <b>RED<span>HAWK</span></b>
+  </div>
+  <nav>
+    <div class="nav-group">流量工具</div>
+    <button class="nav-item active" data-view="proxy" onclick="showView('proxy')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 4v3M12 17v3M4 12h3M17 12h3"/></svg>
+      抓包代理
+    </button>
+    <button class="nav-item" data-view="repeater" onclick="showView('repeater')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>
+      发包 Repeater
+    </button>
+    <button class="nav-item" data-view="traffic" onclick="showView('traffic'); loadTraffic()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg>
+      流量记录
+    </button>
+    <div class="nav-group">扫描与报告</div>
+    <button class="nav-item" data-view="scan" onclick="showView('scan')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg>
+      任务扫描
+    </button>
+    <button class="nav-item" data-view="findings" onclick="showView('findings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      漏洞发现
+    </button>
+    <button class="nav-item" data-view="repro" onclick="showView('repro')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/></svg>
+      复现报告
+    </button>
+    <div class="nav-group">系统</div>
+    <button class="nav-item" data-view="targets" onclick="showView('targets'); loadTargets()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 7h-9M14 17H5M17 12H8"/><circle cx="17" cy="7" r="3"/><circle cx="8" cy="17" r="3"/></svg>
+      目标管理
+    </button>
+    <button class="nav-item" data-view="kb" onclick="showView('kb')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V2H6.5A2.5 2.5 0 0 0 4 4.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>
+      知识助手
+    </button>
+    <button class="nav-item" data-view="audit" onclick="showView('audit'); loadAudit()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="m9 13 2 2 4-4"/></svg>
+      审计日志
+    </button>
+    <div class="nav-group">资源</div>
+    <button class="nav-item" data-view="src" onclick="showView('src'); loadSRC()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.4 7.2H22l-6 4.5 2.3 7.3-6.3-4.6-6.3 4.6L8 13.7l-6-4.5h7.6z"/></svg>
+      赏金平台
+    </button>
+    <div class="nav-group">AI 引擎</div>
+    <button class="nav-item" data-view="llm" onclick="showView('llm'); loadLLM()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 1 7 7c0 2.4-1.2 4.5-3 5.7V17a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-2.3C6.2 13.5 5 11.4 5 9a7 7 0 0 1 7-7z"/><path d="M9 22h6M10 18h4"/></svg>
+      AI 模型
+    </button>
+    <button class="nav-item" data-view="analysis" onclick="showView('analysis'); loadAnalysis()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 14 4-4 3 3 5-6"/><circle cx="7" cy="14" r="1"/><circle cx="11" cy="10" r="1"/><circle cx="14" cy="13" r="1"/></svg>
+      数据包分析
+    </button>
+    <div class="nav-group">帮助</div>
+    <button class="nav-item" data-view="guide" onclick="showView('guide')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+      使用指南
+    </button>
+  </nav>
+  <div class="theme-box">
+    <button class="theme-btn" id="themeLight" onclick="setTheme('light')">☀ 白</button>
+    <button class="theme-btn active" id="themeWarm" onclick="setTheme('warm')">🕯 暖</button>
+    <button class="theme-btn" id="themeDark" onclick="setTheme('dark')">🌑 红黑</button>
+  </div>
+</aside>
+
+<!-- ===== 主区 ===== -->
+<div class="main">
+
+  <!-- 抓包代理 -->
+  <div class="view" id="view-proxy">
+    <div class="view-title">抓包代理</div>
+    <div class="view-desc">启动代理后，把浏览器/工具的代理指向 <b style="color:var(--accent)" id="proxyAddr">127.0.0.1:8888</b>，经过的请求自动记录（HTTPS 需证书，当前支持明文 HTTP）。</div>
+    <div class="panel">
+      <div class="flex-h">
+        <button class="btn" id="proxyToggle" onclick="proxyToggle()" style="display:inline-flex;align-items:center;gap:7px">
+          <svg id="proxyIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="width:15px;height:15px">
+            <path d="M8 5.5v13l11-6.5z"/>
+          </svg>
+          <span id="proxyToggleText">启动</span>
+        </button>
+        <span class="proxy-state" id="proxyState" style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);margin-left:8px">
+          <span class="led led-off" id="proxyStateLed"></span>
+          <span id="proxyStateText">未启动</span>
+        </span>
+        <label style="margin:0 0 0 12px">端口</label>
+        <input id="proxyPort" type="number" value="8888" style="width:90px" />
+        <button class="btn ghost small" onclick="cleanupCheck()" style="margin-left:auto">🧹 清理残留进程</button>
+      </div>
+      <div class="warn-note" style="margin-top:10px">
+        🖥 启动后自动接管 <b>Windows 系统代理</b> → 本机所有应用的 HTTP 流量都会进入（浏览器/软件无需手动配置）；停止时自动还原。<br />
+        🔒 <b>HTTPS 解密</b>：先点下方「下载 CA 证书」→ 安装到系统"受信任的根证书颁发机构" → 之后 HTTPS 流量也可解密查看。
+      </div>
+      <div class="action-row">
+        <button class="btn ghost small" onclick="downloadCA()">🔑 下载 CA 证书</button>
+        <span style="font-size:11px;color:var(--dim)" id="caStatus"></span>
+      </div>
+      <div class="msg" id="msgCA"></div>
+      <div style="font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.8">
+        💡 <b style="color:var(--text)">安装方法（任选其一）：</b><br/>
+        · 自动：在 <code style="background:var(--card);padding:1px 5px;border-radius:4px">E:\harness work\RedHawk\data\安装CA证书.bat</code> 上右键 → 以管理员身份运行<br/>
+        · 手动：下载 CA → 右键 .crt → 安装证书 → 本地计算机 → 受信任的根证书颁发机构<br/>
+        · 装完<b style="color:var(--accent)">重启浏览器</b>，HTTPS 即可解密
+      </div>
+      <div class="msg" id="msgProxy"></div>
+      <div class="msg hidden" id="msgCleanup"></div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line)">
+        <div style="font-size:12px;color:var(--dim);margin-bottom:6px">🤖 一键自动化：AI 分析全部抓包流量 → 识别漏洞 → 自动生成复现报告</div>
+        <button class="btn" onclick="autoAnalyze()">⚡ 一键 AI 抓包分析</button>
+        <div class="msg" id="msgAuto"></div>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>最近抓取</h3>
+      <div id="proxyRecent"></div>
+    </div>
+  </div>
+
+  <!-- 发包 Repeater -->
+  <div class="view hidden" id="view-repeater">
+    <div class="view-title">发包 Repeater</div>
+    <div class="view-desc">构造任意 HTTP 请求并查看返回包。支持粘贴 Burp 原始请求自动解析。</div>
+    <div class="panel">
+      <div class="action-row">
+        <select id="repMethod" style="width:110px;flex:none">
+          <option>GET</option><option>POST</option><option>PUT</option>
+          <option>DELETE</option><option>HEAD</option><option>OPTIONS</option>
+        </select>
+        <input id="repUrl" placeholder="http://目标/路径" />
+      </div>
+      <label>Headers（JSON）</label>
+      <input id="repHeaders" placeholder='{"User-Agent": "RedHawk/1.0"}' />
+      <label>Body</label>
+      <textarea id="repBody" placeholder="POST 请求体"></textarea>
+      <div class="action-row">
+        <button class="btn" onclick="repeaterSend()">🚀 发送</button>
+        <button class="btn ghost" onclick="repeaterFromRaw()">解析原始请求</button>
+      </div>
+      <label>原始请求（Burp 格式）</label>
+      <textarea id="repRaw" style="min-height:100px" placeholder='POST /api/login HTTP/1.1&#10;Host: 127.0.0.1&#10;&#10;{"user":"admin"}'></textarea>
+      <div class="msg" id="msgRepeater"></div>
+    </div>
+    <div class="split">
+      <div class="panel"><h3>请求</h3><div class="mono-pre" id="repReqView">- 待发送 -</div></div>
+      <div class="panel"><h3>返回包</h3><div class="mono-pre" id="repRespView">- 待响应 -</div></div>
+    </div>
+  </div>
+
+  <!-- 流量记录 -->
+  <div class="view hidden" id="view-traffic">
+    <div class="view-title">流量记录</div>
+    <div class="view-desc">抓包与发包产生的所有请求/响应记录。启动代理自动接管系统代理，抓取主机所有应用的 HTTP 流量。</div>
+    <div class="panel">
+      <div class="flex-h">
+        <button class="btn small" onclick="loadTraffic()">刷新</button>
+        <button class="btn small ghost" onclick="showTrafficView('list')" id="tvListBtn">📋 全部</button>
+        <button class="btn small ghost" onclick="showTrafficView('cat')" id="tvCatBtn">🗂 归类</button>
+        <label style="margin:0 0 0 8px">来源</label>
+        <select id="trafficSource" style="width:130px" onchange="loadTraffic()">
+          <option value="">全部</option><option value="proxy">代理抓包</option>
+          <option value="repeater">发包记录</option>
+        </select>
+      </div>
+      <div id="trafficList">
+        <table id="tblTraffic" style="margin-top:10px">
+          <thead><tr><th>ID</th><th>方法</th><th>URL</th><th>状态</th><th>来源</th><th>时间</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="trafficCat" class="hidden" style="margin-top:10px"></div>
+    </div>
+    <div class="panel hidden" id="trafficDetail">
+      <h3>报文详情</h3>
+      <div class="split">
+        <div><h3 style="font-size:12px;color:var(--accent)">请求</h3><div class="mono-pre" id="trafficReq"></div></div>
+        <div><h3 style="font-size:12px;color:#2f9e44">响应</h3><div class="mono-pre" id="trafficResp"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 任务扫描 -->
+  <div class="view hidden" id="view-scan">
+    <div class="view-title">任务扫描</div>
+    <div class="view-desc">选择目标与 playbook 一键巡检，完成后可进行 AI 研判、生成报告与复现报告。</div>
+    <div class="panel">
+      <div class="action-row">
+        <label style="margin:0">目标 ID</label>
+        <input id="scanTarget" type="number" placeholder="1" style="flex:none;width:90px" />
+        <label style="margin:0">playbook</label>
+        <select id="scanTemplate" style="flex:none;width:150px"></select>
+      </div>
+      <div class="action-row" style="margin-top:8px">
+        <button class="btn" onclick="createTask()">创建任务</button>
+        <button class="btn ghost" onclick="runTaskBg()">▶ 运行</button>
+        <button class="btn ghost small" onclick="refreshProgress()">刷新</button>
+        <button class="btn ghost small" onclick="runVerdict()">AI 研判</button>
+        <button class="btn ghost small" onclick="genReport()">生成报告</button>
+        <button class="btn ghost small" onclick="genRepro()">复现报告</button>
+      </div>
+      <div class="msg" id="msgScan"></div>
+      <div class="progress-bar"><div class="fill" id="progFill"></div></div>
+      <div class="mono-pre" id="progSteps" style="min-height:70px">- 未运行 -</div>
+    </div>
+  </div>
+
+  <!-- 漏洞发现 -->
+  <div class="view hidden" id="view-findings">
+    <div class="view-title">漏洞发现</div>
+    <div class="view-desc">任务的扫描结果，含 AI 研判状态，点击证据可查看原始输出。</div>
+    <div class="panel">
+      <div class="flex-h">
+        <label style="margin:0">任务 ID</label>
+        <input id="findTask" type="number" style="flex:none;width:90px" />
+        <button class="btn small" onclick="loadFindings()">查询</button>
+        <button class="btn small ghost" onclick="loadAssets()">资产</button>
+      </div>
+      <table id="tblFind" style="margin-top:10px">
+        <thead><tr><th>ID</th><th>严重度</th><th>标题</th><th>资产</th><th>AI 研判</th><th>证据</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 复现报告 -->
+  <div class="view hidden" id="view-repro">
+    <div class="view-title">漏洞复现报告</div>
+    <div class="view-desc">聚合 AI 研判确认的漏洞与流量证据，自动生成复现步骤、请求包与修复建议。</div>
+    <div class="panel">
+      <div class="flex-h">
+        <label style="margin:0">任务 ID</label>
+        <input id="reproTask" type="number" placeholder="1" style="flex:none;width:90px" />
+        <button class="btn" onclick="genRepro()">生成复现报告</button>
+      </div>
+      <div class="msg" id="msgRepro"></div>
+      <div class="mono-pre hidden" id="reproBox" style="max-height:520px;margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- 目标管理 -->
+  <div class="view hidden" id="view-targets">
+    <div class="view-title">目标管理</div>
+    <div class="view-desc">登记授权范围（*.domain / CIDR / IP），越权操作会被硬拦截并留痕。</div>
+    <div class="panel">
+      <label>名称</label><input id="tgtName" placeholder="内网靶场" />
+      <label>授权范围</label><input id="tgtScope" placeholder="*.lab.local, 10.0.0.0/24, 127.0.0.1" />
+      <button class="btn" onclick="addTarget()">登记目标</button>
+      <div class="msg" id="msgTarget"></div>
+      <table id="tblTargets" style="margin-top:12px">
+        <thead><tr><th>ID</th><th>名称</th><th>授权范围</th><th>状态</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 知识助手 -->
+  <div class="view hidden" id="view-kb">
+    <div class="view-title">知识助手</div>
+    <div class="view-desc">本地手册（Pentest_Note 667 篇）优先检索，未命中自动调取 CSDN 知识库。</div>
+    <div class="panel">
+      <label>问题</label>
+      <div class="action-row">
+        <input id="kbQuestion" placeholder="内网横向移动有什么思路？" />
+        <button class="btn" onclick="kbAsk()">🔎 提问</button>
+      </div>
+      <div class="msg" id="msgKb"></div>
+      <div id="kbResult" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- 审计 -->
+  <div class="view hidden" id="view-audit">
+    <div class="view-title">审计日志</div>
+    <div class="view-desc">全量操作留痕，含越权拦截记录。</div>
+    <div class="panel">
+      <div class="mono-pre" id="auditBox" style="max-height:500px"></div>
+    </div>
+  </div>
+
+  <!-- 赏金平台 -->
+  <div class="view hidden" id="view-src">
+    <div class="view-title">🎯 漏洞赏金平台</div>
+    <div class="view-desc">SRC / 众测 / 国际赏金平台导航，点击直达。仅用于授权范围内的漏洞挖掘。</div>
+    <div class="panel">
+      <div id="srcEnterprise"></div>
+    </div>
+    <div id="srcGroups"></div>
+  </div>
+
+  <!-- AI 模型设置 -->
+  <div class="view hidden" id="view-llm">
+    <div class="view-title">AI 模型（DeepSeek）</div>
+    <div class="view-desc">填入 DeepSeek API 密钥，选择模型后即可使用一键自动化抓包分析。</div>
+    <div class="panel">
+      <h3>🔑 API 密钥</h3>
+      <label>DeepSeek API Key（从 platform.deepseek.com 获取，仅本机加密存储）</label>
+      <input id="llmKey" type="password" placeholder="sk-..." />
+      <div class="msg" id="msgLLM"></div>
+    </div>
+    <div class="panel">
+      <h3>🧠 选择模型</h3>
+      <div id="llmModels" style="display:flex;gap:10px;flex-wrap:wrap"></div>
+      <div style="margin-top:14px" class="action-row">
+        <button class="btn" onclick="saveLLM()">💾 保存配置</button>
+        <button class="btn ghost" onclick="testLLM()">🔌 测试连接</button>
+      </div>
+      <div class="msg" id="msgLLM2"></div>
+    </div>
+  </div>
+
+  <!-- 数据包分析 -->
+  <div class="view hidden" id="view-analysis">
+    <div class="view-title">📊 数据包分析</div>
+    <div class="view-desc">一键 AI 抓包分析的结果管理：每个数据包的漏洞研判、置信度与原始证据，点击可展开详情。</div>
+    <div class="panel">
+      <div class="flex-h">
+        <button class="btn small" onclick="loadAnalysis()">🔄 刷新</button>
+        <button class="btn small ghost" onclick="showView('proxy')">◀ 去抓包</button>
+        <span style="font-size:12px;color:var(--dim)" id="analysisSummary"></span>
+      </div>
+      <div style="margin-top:12px">
+        <table id="tblAnalysis">
+          <thead><tr>
+            <th>ID</th><th>流量</th><th>方法</th><th>URL / 资产</th>
+            <th>漏洞类型</th><th>严重度</th><th>研判</th><th>置信度</th><th>理由</th><th>证据</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel hidden" id="analysisDetail">
+      <h3>数据包详情 <em>// EVIDENCE</em></h3>
+      <div class="mono-pre" id="analysisDetailBox" style="max-height:500px"></div>
+    </div>
+  </div>
+
+  <!-- 使用指南 -->
+  <div class="view hidden" id="view-guide">
+    <div class="view-title">📖 使用指南</div>
+    <div class="view-desc">从零开始的简明使用方式，按顺序操作即可。</div>
+
+    <div class="panel">
+      <h3>🚀 快速上手（3 步）</h3>
+      <div style="font-size:12.5px;line-height:2.1">
+        <div><b style="color:var(--accent)">① 配置 AI 模型（可选但推荐）</b><br/>
+          <span style="color:var(--dim)">左侧「AI 模型」→ 填入 DeepSeek API 密钥 → 选择 v4-flash / v4-pro → 保存 → 测试连接</span></div>
+        <div><b style="color:var(--accent)">② 登记目标</b><br/>
+          <span style="color:var(--dim)">「目标管理」→ 填名称 + 授权范围（如 *.example.com, 10.0.0.0/24）→ 登记。越权操作会被硬拦截。</span></div>
+        <div><b style="color:var(--accent)">③ 开始使用</b><br/>
+          <span style="color:var(--dim)">按下面场景选择功能，所有操作都在左侧任务栏。</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🕸 抓包（看流量）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>1. 「抓包代理」→ 点「▶ 启动」按钮（按钮会变「■ 停止」+ 绿灯 = 运行中，自动接管系统代理，本机所有应用流量自动进入）</div>
+        <div>2. 正常上网/使用软件 → 「流量记录」实时显示抓到的数据包（📋 全部 / 🗂 归类 切换查看）</div>
+        <div>3. 点任意一条数据包 → 查看完整请求/响应报文</div>
+        <div>4. <b style="color:var(--text)">想抓 HTTPS 明文</b>：先「🔑 下载 CA 证书」→ 双击 <code style="background:var(--card);padding:1px 5px;border-radius:4px">E:\harness work\RedHawk\data\安装CA证书.bat</code> 以管理员运行 → 重启浏览器</div>
+        <div>5. 用 SwitchyOmega 等插件：代理协议选 <b style="color:var(--accent)">HTTP</b>，服务器 127.0.0.1，端口 8888（选 HTTPS 会连不上！）</div>
+        <div>6. 停止抓包：再点按钮「■ 停止」→ 系统代理自动还原</div>
+        <div>7. 若浏览器提示 ERR_PROXY_CONNECTION_FAILED：通常是服务重启后代理丢失，点「▶ 启动」重新开启（新版已支持自动恢复）</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>📊 数据包分析（AI 结果管理）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>1. 配置 AI 模型后，在「抓包代理」点「⚡ 一键 AI 抓包分析」</div>
+        <div>2. 分析完成<b style="color:var(--accent)">自动跳转到「数据包分析」面板</b></div>
+        <div>3. 详细信息列表：每个数据包的 漏洞类型 / 严重度 / 研判（✅真实·❓待确认）/ 置信度 / 理由</div>
+        <div>4. 点「查看」展开完整详情：复现步骤 + 请求证据 + 响应证据</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>📮 发包（手动测试请求）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>1. 「发包 Repeater」→ 选方法（GET/POST/...）→ 填 URL</div>
+        <div>2. 可选：填 Headers（JSON）、Body、或粘贴 Burp 原始请求自动解析</div>
+        <div>3. 点「🚀 发送」→ 右侧显示返回包（状态/响应头/响应体）</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🎯 漏洞扫描（自动化）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>1. 「任务扫描」→ 填目标 ID + 选 playbook → 「创建任务」</div>
+        <div>2. 点「▶ 运行」→ 进度条实时显示（fscan 资产发现 → nuclei 漏洞验证）</div>
+        <div>3. 完成后：点「🧠 AI 研判」过滤误报 → 「生成报告」/「复现报告」</div>
+        <div>4. playbook：<b>quick_scan</b>（内网）/ <b>web_recon</b>（公网子域+存活+验证）/ <b>ai_app_scan</b>（AI 应用安全）</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>⚡ 一键 AI 抓包分析（全自动）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>1. 先配置 AI 模型（必须，密钥存本机加密）</div>
+        <div>2. 抓包产生流量后 → 「抓包代理」面板点「⚡ 一键 AI 抓包分析」</div>
+        <div>3. 自动完成：读流量 → AI 识别漏洞 → 深度研判 → 生成复现报告 → <b style="color:var(--accent)">跳转数据包分析界面</b></div>
+        <div>4. 注意：流量无漏洞时 AI 会返回空结果（正常，不报错）</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>📚 知识助手</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>「知识助手」→ 提问（如"内网横向移动思路"）→ 本地手册优先 + CSDN 知识库补充（可点击打开原文）</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🧹 常用维护</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div>· 端口被占用/代理启动失败 → 「抓包代理」→「🧹 清理残留进程」</div>
+        <div>· 服务重启后代理自动恢复（检测系统代理指向 8888 自动拉起）</div>
+        <div>· 查看所有操作记录 → 「审计日志」</div>
+        <div>· 主题切换 → 左下角 ☀白 / 🕯暖 / 🌑红黑</div>
+        <div>· 装新工具 → 命令行 <code>rh plugins install --key 工具名</code></div>
+        <div>· 独立桌面版 → 双击 <code style="background:var(--card);padding:1px 5px;border-radius:4px">dist\RedHawk.exe</code>（脱离浏览器）</div>
+      </div>
+    </div>
+
+    <!-- 免责声明 -->
+    <div class="panel" style="border-color:var(--accent);border-top:3px solid var(--accent)">
+      <h3>⚠️ 免责声明</h3>
+      <div style="font-size:12px;line-height:2;color:var(--dim)">
+        <div><b style="color:var(--text)">RedHawk（红隼）是面向安全研究、CTF 竞赛、教学演示与授权渗透测试的专业工具。</b>使用本工具前，你必须确认并承诺：</div>
+        <div style="margin-top:8px">
+          <div>1. 你已获得目标系统的<strong style="color:var(--accent)">明确、书面授权</strong>，且测试范围与目标所有者确认无误；</div>
+          <div>2. 你将遵守所在国家/地区的<strong style="color:var(--accent)">全部法律法规</strong>（包括但不限于《网络安全法》《数据安全法》《个人信息保护法》）；</div>
+          <div>3. 因未授权使用、误用、滥用本工具所产生的一切法律后果与责任，<strong style="color:var(--accent)">均由使用者自行承担</strong>；</div>
+          <div>4. 本项目作者、贡献者对本工具的任何使用方式<strong style="color:var(--accent)">不承担任何担保与责任</strong>。</div>
+        </div>
+        <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
+          ⚠️ <b style="color:var(--accent)">未经授权对任何系统进行渗透测试、漏洞利用、数据访问均属违法行为。请勿用于非法用途。</b>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== 主题切换（持久化） =====
+function setTheme(name) {
+  document.body.className = 'theme-' + name;
+  document.getElementById('themeLight').classList.toggle('active', name === 'light');
+  document.getElementById('themeWarm').classList.toggle('active', name === 'warm');
+  document.getElementById('themeDark').classList.toggle('active', name === 'dark');
+  try { localStorage.setItem('redhawk-theme', name); } catch(e) {}
+}
+(function() {
+  try { setTheme(localStorage.getItem('redhawk-theme') || 'warm'); } catch(e) { setTheme('warm'); }
+})();
+
+// ===== 视图切换 =====
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.add('hidden'));
+  document.getElementById('view-' + v).classList.remove('hidden');
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+}
+
+// ===== API =====
+async function api(path, method, body) {
+  const opt = { method: method || 'GET', headers: { 'Content-Type': 'application/json' } };
+  if (body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  if (!r.ok) { const t = await r.text(); throw new Error(t.slice(0, 200)); }
+  return r.json();
+}
+function msg(el, text, ok) {
+  const e = document.getElementById(el); if (!e) return;
+  e.textContent = text; e.className = 'msg ' + (ok ? 'ok' : 'err');
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+
+// ===== 初始化 =====
+async function init() {
+  try {
+    const m = await api('/api/meta');
+    document.getElementById('scanTemplate').innerHTML = m.templates.map(t => `<option>${t}</option>`).join('');
+  } catch(e) {}
+  loadTargets();
+  refreshCAStatus();
+  // 同步代理真实状态（服务器可能已自动恢复代理）
+  try {
+    const s = await api('/api/proxy/status');
+    renderProxyState(!!s.running);
+  } catch(e) {}
+}
+
+// ===== 抓包代理 =====
+let proxyRunning = false;
+
+// 状态渲染：图标 + 文字 + 颜色随 启动/停止 切换
+function renderProxyState(running) {
+  proxyRunning = running;
+  const btn = document.getElementById('proxyToggle');
+  const icon = document.getElementById('proxyIcon');
+  const text = document.getElementById('proxyToggleText');
+  const led = document.getElementById('proxyStateLed');
+  const stateText = document.getElementById('proxyStateText');
+  if (running) {
+    // 运行中：实心方块（停止图标）+ 红色 + 呼吸灯
+    icon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor" stroke="none"/>';
+    text.textContent = '停止';
+    btn.classList.add('running');
+    btn.style.background = 'var(--accent)';
+    led.classList.remove('led-off'); led.classList.add('led-on');
+    stateText.textContent = '运行中';
+    stateText.style.color = '#2f9e44';
+  } else {
+    // 未启动：播放三角（启动图标）+ 默认色 + 灰灯
+    icon.innerHTML = '<path d="M8 5.5v13l11-6.5z"/>';
+    text.textContent = '启动';
+    btn.classList.remove('running');
+    btn.style.background = '';
+    led.classList.add('led-off'); led.classList.remove('led-on');
+    stateText.textContent = '未启动';
+    stateText.style.color = '';
+  }
+}
+
+async function proxyToggle() {
+  if (proxyRunning) {
+    try {
+      await api('/api/proxy', 'POST', { action: 'stop' });
+      msg('msgProxy', '代理已停止，系统代理已还原', true);
+      renderProxyState(false);
+    } catch(e) { msg('msgProxy', '停止失败: ' + e.message, false); }
+  } else {
+    const port = parseInt(document.getElementById('proxyPort').value) || 8888;
+    try {
+      const r = await api('/api/proxy', 'POST', { action: 'start', port });
+      msg('msgProxy', '✅ 代理运行中 — ' + (r.hint || '') +
+        (r.system_proxy ? '｜🖥 已接管系统代理（主机所有 HTTP 流量自动捕获）' : '｜⚠️ 系统代理接管失败（可能权限不足）'), true);
+      document.getElementById('proxyAddr').textContent = '127.0.0.1:' + port;
+      renderProxyState(true);
+    } catch(e) { msg('msgProxy', '启动失败: ' + e.message, false); }
+  }
+}
+
+// ===== CA 证书下载（HTTPS 解密） =====
+function downloadCA() {
+  msg('msgCA', '正在下载 RedHawk CA 证书...', true);
+  fetch('/api/cert/ca').then(r => {
+    if (!r.ok) throw new Error('下载失败');
+    return r.blob();
+  }).then(blob => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'redhawk-ca.crt';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    msg('msgCA', '✅ CA 证书已下载！安装方法：右键该证书 → 安装证书 → 本地计算机 → 受信任的根证书颁发机构 → 完成。之后重启浏览器即可解密 HTTPS。', true);
+  }).catch(e => msg('msgCA', '失败: ' + e.message, false));
+}
+
+// ===== 一键安装 CA（提权） =====
+async function installCA() {
+  msg('msgCA', '正在请求安装（请在弹出的 UAC 窗口点"是"）...', true);
+  try {
+    const r = await api('/api/cert/install', 'POST');
+    msg('msgCA', '✅ ' + r.msg, true);
+    refreshCAStatus();
+  } catch(e) {
+    const detail = e.message.includes('{') ? e.message.slice(e.message.indexOf('{'), e.message.indexOf('}')+1) : e.message;
+    try { const d = JSON.parse(detail); msg('msgCA', '⚠️ ' + (d.detail || e.message), false); }
+    catch(_) { msg('msgCA', '⚠️ ' + e.message, false); }
+  }
+}
+async function refreshCAStatus() {
+  try {
+    const s = await api('/api/cert/status');
+    document.getElementById('caStatus').textContent = s.installed ? '✅ CA 已信任' : '⚠️ CA 未安装';
+  } catch(e) {}
+}
+
+// ===== 清理残留进程 =====
+async function cleanupCheck() {
+  const box = document.getElementById('msgCleanup');
+  box.classList.remove('hidden');
+  try {
+    const r = await api('/api/cleanup/check');
+    if (!r.conflicts || !r.conflicts.length) {
+      box.textContent = '🧹 无残留进程，端口干净 ✓';
+      box.className = 'msg ok';
+      return;
+    }
+    const desc = r.conflicts.map(c =>
+      `PID ${c.pid} · 端口 ${c.port} · ${c.process}${c.safe_to_kill ? '' : '（非 RedHawk 进程）'}`
+    ).join('\n');
+    if (confirm('发现 ' + r.conflicts.length + ' 个占用端口进程:\n\n' + desc +
+               '\n\n确认清理？（当前运行的 RedHawk 服务不会被误杀）')) {
+      const rr = await api('/api/cleanup', 'POST', { force: false });
+      box.textContent = `🧹 已清理 ${rr.killed_count} 个` +
+        (rr.skipped_count ? `，跳过 ${rr.skipped_count} 个（非 RedHawk 进程）` : '') + ' ✓';
+      box.className = 'msg ok';
+    } else {
+      box.textContent = '已取消';
+      box.className = 'msg';
+    }
+  } catch(e) {
+    box.textContent = '清理失败: ' + e.message;
+    box.className = 'msg err';
+  }
+}
+
+// ===== 发包 =====
+async function repeaterSend() {
+  const method = document.getElementById('repMethod').value;
+  const url = document.getElementById('repUrl').value.trim();
+  const body = document.getElementById('repBody').value;
+  if (!url) return msg('msgRepeater', '请输入 URL', false);
+  let headers = {};
+  try { headers = JSON.parse(document.getElementById('repHeaders').value || '{}'); }
+  catch(e) { return msg('msgRepeater', 'Headers 不是合法 JSON', false); }
+  msg('msgRepeater', '发送中...', true);
+  try {
+    const r = await api('/api/repeater', 'POST', { method, url, headers, body });
+    document.getElementById('repReqView').innerHTML =
+      `<span class="req-c">${esc(method)} ${esc(url)}</span>\n\n${esc(Object.entries(headers).map(([k,v]) => k+': '+v).join('\n'))}\n\n${esc(body)}`;
+    document.getElementById('repRespView').innerHTML =
+      `<span class="resp-c">HTTP ${r.status}</span>\n\n${esc(Object.entries(r.headers||{}).map(([k,v]) => k+': '+v).join('\n'))}\n\n${esc((r.body||'').slice(0,8000))}`;
+    msg('msgRepeater', `HTTP ${r.status} 完成`, true);
+  } catch(e) { msg('msgRepeater', '失败: ' + e.message, false); }
+}
+async function repeaterFromRaw() {
+  const raw = document.getElementById('repRaw').value;
+  if (!raw.trim()) return msg('msgRepeater', '请输入原始请求', false);
+  try {
+    const r = await api('/api/repeater/parse', 'POST', { raw });
+    document.getElementById('repMethod').value = r.method;
+    document.getElementById('repUrl').value = r.url;
+    document.getElementById('repHeaders').value = JSON.stringify(r.headers, null, 2);
+    document.getElementById('repBody').value = r.body;
+    msg('msgRepeater', '已解析原始请求', true);
+  } catch(e) { msg('msgRepeater', '解析失败: ' + e.message, false); }
+}
+
+// ===== 流量 =====
+function showTrafficView(view) {
+  const isCat = view === 'cat';
+  document.getElementById('trafficList').classList.toggle('hidden', isCat);
+  document.getElementById('trafficCat').classList.toggle('hidden', !isCat);
+  document.getElementById('tvListBtn').classList.toggle('ghost', isCat);
+  document.getElementById('tvCatBtn').classList.toggle('ghost', !isCat);
+  if (isCat) loadCategories();
+  else loadTraffic();
+}
+async function loadCategories() {
+  try {
+    const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
+    const r = await api('/api/traffic-categories?limit=200&source=' + encodeURIComponent(src));
+    const box = document.getElementById('trafficCat');
+    if (!r.categories || !r.categories.length) {
+      box.innerHTML = '<div class="empty">暂无流量 — 启动抓包代理后自动捕获主机流量</div>';
+      return;
+    }
+    box.innerHTML = r.categories.map(g =>
+      `<div style="margin-bottom:14px">
+        <div style="font-weight:700;font-size:13px;color:var(--accent);margin-bottom:6px">
+          🗂 ${esc(g.category)} <span style="color:var(--dim);font-weight:400;font-size:11px">(${g.count} 条)</span>
+        </div>
+        ${g.items.map(t =>
+          `<div onclick="showTrafficDetail(${t.id})" style="cursor:pointer;display:flex;gap:8px;padding:5px 8px;border-radius:6px;font-size:12px;border-bottom:1px solid var(--line);align-items:center">
+            <b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'};min-width:46px">${t.method}</b>
+            <span style="color:${t.status>=400?'var(--accent)':'var(--dim)'};min-width:36px">${t.status}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(t.url)}</span>
+            <span style="color:var(--dim);font-size:10.5px">#${t.id}</span>
+          </div>`).join('')}
+      </div>`).join('');
+  } catch(e) {}
+}
+async function loadTraffic() {
+  try {
+    const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
+    const rows = await api('/api/traffic?limit=60&source=' + encodeURIComponent(src));
+    const tb = document.querySelector('#tblTraffic tbody');
+    tb.innerHTML = rows.map(t =>
+      `<tr class="traffic-row" onclick="showTrafficDetail(${t.id})">
+        <td>#${t.id}</td><td><b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'}">${t.method}</b></td>
+        <td>${esc(t.url.slice(0,80))}</td>
+        <td><span class="sev ${t.status>=500?'critical':(t.status>=400?'high':(t.status>=300?'medium':'low'))}">${t.status}</span></td>
+        <td><span class="badge">${t.source}</span></td><td style="color:var(--dim)">${t.created_at}</td>
+      </tr>`).join('') || '<tr><td colspan="6" class="empty">无流量记录 — 启动抓包代理或使用发包工具</td></tr>';
+    const recent = document.getElementById('proxyRecent');
+    if (recent) {
+      recent.innerHTML = rows.slice(0,10).map(t =>
+        `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid var(--line)">
+          <b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'}">${t.method}</b>
+          <span style="color:var(--dim)">${t.status} · ${esc(t.url.slice(0,70))}</span>
+        </div>`).join('') || '<div class="empty">暂无</div>';
+    }
+  } catch(e) {}
+}
+async function showTrafficDetail(id) {
+  try {
+    const t = await api('/api/traffic/' + id);
+    document.getElementById('trafficDetail').classList.remove('hidden');
+    let reqH = ''; try { reqH = Object.entries(JSON.parse(t.req_headers||'{}')).map(([k,v])=>k+': '+v).join('\n'); } catch(e) {}
+    let respH = ''; try { respH = Object.entries(JSON.parse(t.resp_headers||'{}')).map(([k,v])=>k+': '+v).join('\n'); } catch(e) {}
+    document.getElementById('trafficReq').textContent = `${t.method} ${t.url}\n${reqH}\n\n${t.req_body||''}`;
+    document.getElementById('trafficResp').textContent = `HTTP ${t.status}\n${respH}\n\n${(t.resp_body||'').slice(0,8000)}`;
+  } catch(e) {}
+}
+
+// ===== 扫描 =====
+async function createTask() {
+  const target_id = parseInt(document.getElementById('scanTarget').value);
+  const template = document.getElementById('scanTemplate').value;
+  if (!target_id) return msg('msgScan', '请输入目标 ID', false);
+  try {
+    const r = await api('/api/tasks', 'POST', { target_id, template });
+    msg('msgScan', `任务 #${r.task_id} 已创建`, true);
+    document.getElementById('findTask').value = r.task_id;
+  } catch(e) { msg('msgScan', '失败: ' + e.message, false); }
+}
+async function runTaskBg() {
+  const id = parseInt(document.getElementById('findTask').value) || parseInt(document.getElementById('scanTarget').value);
+  if (!id) return msg('msgScan', '请输入任务 ID', false);
+  try {
+    await api('/api/tasks/' + id + '/run?background=true', 'POST');
+    msg('msgScan', '后台运行中，每 2 秒刷新...', true);
+    const t = setInterval(async () => {
+      const p = await api('/api/tasks/' + id);
+      renderProgress(p);
+      if (p.status !== 'running' && p.status !== 'pending') { clearInterval(t); loadFindings(); }
+    }, 2000);
+  } catch(e) { msg('msgScan', '失败: ' + e.message, false); }
+}
+async function refreshProgress() {
+  const id = parseInt(document.getElementById('findTask').value) || parseInt(document.getElementById('scanTarget').value);
+  if (!id) return;
+  try { renderProgress(await api('/api/tasks/' + id)); } catch(e) {}
+}
+function renderProgress(p) {
+  const pct = p.steps_total ? Math.round(p.steps_done / p.steps_total * 100) : 0;
+  document.getElementById('progFill').style.width = pct + '%';
+  document.getElementById('progSteps').textContent =
+    `状态: ${p.status} | 阶段: ${p.current_phase||'-'} | ${p.steps_done}/${p.steps_total}\n` +
+    (p.steps||[]).map(s => `[${s.status.toUpperCase()}] ${s.tool_key} (${s.phase})${s.error?' — '+s.error:''}`).join('\n');
+}
+async function runVerdict() {
+  const id = parseInt(document.getElementById('findTask').value) || parseInt(document.getElementById('scanTarget').value);
+  if (!id) return msg('msgScan', '请输入任务 ID', false);
+  try {
+    const r = await api('/api/tasks/' + id + '/verdict', 'POST');
+    msg('msgScan', `研判完成: 保留 ${r.kept} | 闸门通过 ${r.verified}/${r.rejected}`, true);
+    loadFindings();
+  } catch(e) { msg('msgScan', '研判失败: ' + e.message, false); }
+}
+
+// ===== 漏洞发现 =====
+async function loadFindings() {
+  const id = parseInt(document.getElementById('findTask').value);
+  if (!id) return;
+  try {
+    const rows = await api('/api/findings?task_id=' + id);
+    const tb = document.querySelector('#tblFind tbody');
+    tb.innerHTML = rows.map(f => {
+      let ai = '未研判';
+      try {
+        const v = JSON.parse(f.ai_verdict || '{}');
+        ai = v.gate && String(v.gate).startsWith('rejected') ? '⛔ 闸门拒绝'
+          : (v.is_real ? '✅ 真实' : '❌ 误报') + ` (${v.confidence})`;
+      } catch(e) {}
+      return `<tr>
+        <td>e${String(f.id).padStart(3,'0')}</td>
+        <td><span class="sev ${(f.severity||'info').toLowerCase()}">${(f.severity||'').toUpperCase()}</span></td>
+        <td>${esc(f.title||'')}</td><td>${esc(f.asset_ref||'')}</td>
+        <td>${ai}</td>
+        <td><button class="btn small ghost" onclick="showEvidence(${f.id})">证据</button></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="6" class="empty">无结果 — 先运行扫描任务</td></tr>';
+  } catch(e) {}
+}
+async function showEvidence(id) {
+  const tid = parseInt(document.getElementById('findTask').value);
+  const rows = await api('/api/findings?task_id=' + tid);
+  const f = rows.find(x => x.id === id);
+  if (f) alert('证据原文:\n\n' + (f.detail||'无').slice(0,1500));
+}
+async function loadAssets() {
+  const id = parseInt(document.getElementById('findTask').value);
+  if (!id) return;
+  const rows = await api('/api/assets?task_id=' + id);
+  const tb = document.querySelector('#tblFind tbody');
+  tb.innerHTML = rows.map(a =>
+    `<tr><td>${a.id}</td><td colspan="2">[${a.kind}] ${esc(a.value)}</td><td>${esc(a.source_tool||'')}</td><td colspan="2"></td></tr>`
+  ).join('') || '<tr><td colspan="6" class="empty">无资产</td></tr>';
+}
+
+// ===== 报告 =====
+async function genReport() {
+  const id = parseInt(document.getElementById('findTask').value) || parseInt(document.getElementById('scanTarget').value);
+  if (!id) return msg('msgScan', '请输入任务 ID', false);
+  try {
+    const r = await api('/api/tasks/' + id + '/report', 'POST');
+    msg('msgScan', '报告已生成: ' + r.path, true);
+  } catch(e) { msg('msgScan', '失败: ' + e.message, false); }
+}
+async function genRepro() {
+  const id = parseInt(document.getElementById('reproTask').value) || parseInt(document.getElementById('findTask').value) || parseInt(document.getElementById('scanTarget').value);
+  if (!id) return msg('msgRepro', '请输入任务 ID', false);
+  try {
+    const r = await api('/api/tasks/' + id + '/repro', 'POST');
+    const rep = await api('/api/reports/' + r.report_id);
+    const box = document.getElementById('reproBox');
+    box.textContent = rep.content || '';
+    box.classList.remove('hidden');
+    msg('msgRepro', '复现报告已生成: ' + r.path, true);
+  } catch(e) { msg('msgRepro', '失败: ' + e.message, false); }
+}
+
+// ===== 目标 =====
+async function addTarget() {
+  const name = document.getElementById('tgtName').value.trim();
+  const scope = document.getElementById('tgtScope').value.trim();
+  if (!name || !scope) return msg('msgTarget', '请填写名称和授权范围', false);
+  try {
+    await api('/api/targets', 'POST', { name, scope });
+    msg('msgTarget', '已登记目标', true);
+    document.getElementById('tgtName').value = ''; document.getElementById('tgtScope').value = '';
+    loadTargets();
+  } catch(e) { msg('msgTarget', '失败: ' + e.message, false); }
+}
+async function loadTargets() {
+  try {
+    const rows = await api('/api/targets');
+    document.querySelector('#tblTargets tbody').innerHTML = rows.map(t =>
+      `<tr><td>#${t.id}</td><td>${esc(t.name)}</td><td>${esc(t.scope)}</td><td>${t.status}</td></tr>`
+    ).join('');
+  } catch(e) {}
+}
+
+// ===== 知识助手 =====
+async function kbAsk() {
+  const q = document.getElementById('kbQuestion').value.trim();
+  if (!q) return msg('msgKb', '请输入问题', false);
+  msg('msgKb', '检索中...', true);
+  try {
+    const r = await api('/api/kb/ask', 'POST', { question: q, top_k: 5, csdn: true });
+    const box = document.getElementById('kbResult');
+    let html = '';
+
+    // 本地来源
+    if (r.source === 'local' && r.hits && r.hits.length) {
+      html += `<div style="font-size:12px;color:var(--dim);margin-bottom:8px">📖 本地知识库命中 ${r.hits.length} 条</div>`;
+      html += r.hits.map((h,i) =>
+        `<div style="background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+          <div style="font-weight:700;font-size:12.5px;margin-bottom:4px">来源 ${i+1}: ${esc(h.title)}</div>
+          <div style="font-size:11.5px;color:var(--dim);margin-bottom:4px">${esc(h.source||'')}</div>
+          <div style="font-size:12px;line-height:1.6">${esc(h.content.slice(0,400))}</div>
+        </div>`).join('');
+    }
+
+    // CSDN 来源
+    if (r.csdn && r.csdn.length) {
+      html += `<div style="font-size:12px;color:var(--dim);margin:12px 0 8px">🌐 CSDN 知识库命中 ${r.csdn.length} 条（点击打开原文）</div>`;
+      html += r.csdn.map(c =>
+        `<a href="${esc(c.url)}" target="_blank" rel="noopener"
+           style="display:block;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;text-decoration:none;color:var(--text);transition:border-color .15s"
+           onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line)'">
+          <div style="font-weight:700;font-size:12.5px;color:var(--accent)">${esc(c.title)}</div>
+          <div style="font-size:11px;color:var(--dim);margin:3px 0">${esc(c.author||'未知作者')} · ${esc(c.type||'')} · ${esc(c.time||'')}</div>
+          <div style="font-size:11.5px;color:var(--dim);line-height:1.5">${esc(c.description||'')}</div>
+        </a>`).join('');
+    }
+
+    if (!html) {
+      html = '<div style="color:var(--dim);font-size:12.5px">无结果 — 本地与 CSDN 均未命中</div>';
+    }
+    box.innerHTML = html;
+    msg('msgKb', `完成（来源: ${r.source === 'csdn' ? 'CSDN' : (r.source === 'local' ? '本地' : '无')}）`, true);
+  } catch(e) { msg('msgKb', '失败: ' + e.message, false); }
+}
+
+// ===== 审计 =====
+async function loadAudit() {
+  try {
+    const r = await api('/api/audit');
+    document.getElementById('auditBox').textContent =
+      (r.rows||[]).map(x => `[${x.ts}] ${x.actor} ${x.action} ${x.target}`).join('\n') || '无记录';
+  } catch(e) {}
+}
+
+// ===== 数据包分析结果 =====
+async function loadAnalysis() {
+  try {
+    const r = await api('/api/analysis/results?limit=100');
+    document.getElementById('analysisSummary').textContent = `共 ${r.total} 条分析结果`;
+    const tb = document.querySelector('#tblAnalysis tbody');
+    if (!r.results || !r.results.length) {
+      tb.innerHTML = '<tr><td colspan="10" class="empty">暂无分析结果 — 先到「抓包代理」点「⚡ 一键 AI 抓包分析」</td></tr>';
+      return;
+    }
+    tb.innerHTML = r.results.map(f => {
+      let detail = {};
+      try { detail = JSON.parse(f.detail || '{}'); } catch(e) {}
+      const isReal = f.ai_status === 'verified';
+      return `<tr>
+        <td>#${f.id}</td>
+        <td><span class="badge">流量${detail.traffic_id || '?'}</span></td>
+        <td><b style="color:${f.method==='GET'?'#2f9e44':'var(--accent)'}">${esc(f.method||'-')}</b></td>
+        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(f.asset_ref||'')}">${esc(f.asset_ref||'')}</td>
+        <td>${esc(f.vuln_type||'')}</td>
+        <td><span class="sev ${(f.severity||'info').toLowerCase()}">${(f.severity||'').toUpperCase()}</span></td>
+        <td>${isReal ? '<b style="color:#2f9e44">✅ 真实</b>' : '<span style="color:var(--amber)">❓ 待确认</span>'}</td>
+        <td>${detail.confidence != null ? (detail.confidence*100).toFixed(0)+'%' : '-'}</td>
+        <td style="max-width:220px;font-size:11.5px;color:var(--dim)">${esc((detail.reason||'').slice(0,60))}</td>
+        <td><button class="btn small ghost" onclick="showAnalysisDetail(${f.id})">查看</button></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {}
+}
+async function showAnalysisDetail(fid) {
+  try {
+    const r = await api('/api/analysis/results?limit=500');
+    const f = (r.results||[]).find(x => x.id === fid);
+    if (!f) return;
+    let d = {};
+    try { d = JSON.parse(f.detail || '{}'); } catch(e) {}
+    document.getElementById('analysisDetail').classList.remove('hidden');
+    let txt = `===== 数据包分析详情 #${f.id} =====\n\n`;
+    txt += `流量ID: ${d.traffic_id || '-'}\n`;
+    txt += `URL: ${f.asset_ref || '-'}\n`;
+    txt += `方法: ${f.method || '-'}  HTTP状态: ${f.http_status || '-'}\n`;
+    txt += `漏洞类型: ${f.vuln_type || '-'}  严重度: ${f.severity || '-'}\n`;
+    txt += `研判: ${f.ai_status === 'verified' ? '✅ 真实' : '❓ 待确认'}  置信度: ${d.confidence != null ? (d.confidence*100).toFixed(0)+'%' : '-'}\n`;
+    txt += `研判理由: ${d.reason || '-'}\n\n`;
+    if (d.repro_steps && d.repro_steps.length) {
+      txt += `===== 复现步骤 =====\n`;
+      d.repro_steps.forEach((s, i) => txt += `${i+1}. ${s}\n`);
+      txt += `\n`;
+    }
+    if (d.request) {
+      txt += `===== 请求证据 =====\n${d.request.method || ''} ${d.request.url || ''}\n${d.request.body || ''}\n\n`;
+    }
+    if (d.response) {
+      txt += `===== 响应证据 =====\nHTTP ${d.response.status || ''}\n${(d.response.body || '').slice(0, 1000)}\n`;
+    }
+    document.getElementById('analysisDetailBox').textContent = txt;
+  } catch(e) {}
+}
+
+// ===== 赏金平台 =====
+async function loadSRC() {
+  try {
+    const r = await api('/api/src-platforms');
+    // 企业 SRC 大全
+    const ent = document.getElementById('srcEnterprise');
+    ent.innerHTML = `<a href="${esc(r.enterprise.url)}" target="_blank" rel="noopener"
+       style="display:flex;align-items:center;gap:12px;padding:14px 16px;border:1px solid var(--accent);border-radius:10px;text-decoration:none;color:var(--text);background:var(--accent-soft)">
+       <span style="font-size:22px">🏢</span>
+       <div><div style="font-weight:700;font-size:13.5px;color:var(--accent)">${esc(r.enterprise.name)}</div>
+       <div style="font-size:11.5px;color:var(--dim);margin-top:2px">${esc(r.enterprise.desc)}</div></div>
+       <span style="margin-left:auto;color:var(--dim)">→</span></a>`;
+    // 分组
+    const box = document.getElementById('srcGroups');
+    box.innerHTML = r.groups.map(g =>
+      `<div class="panel">
+        <h3>${esc(g.group)}</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          ${g.items.map(p =>
+            `<a href="${esc(p.url)}" target="_blank" rel="noopener"
+               style="display:block;padding:10px 12px;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--text);transition:border-color .15s;background:var(--card)"
+               onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--line)'">
+              <div style="font-weight:700;font-size:12.5px;color:var(--accent)">${esc(p.name)}</div>
+              <div style="font-size:11px;color:var(--dim);margin-top:3px">${esc(p.desc||'')}</div>
+            </a>`).join('')}
+        </div>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('srcGroups').innerHTML = '<div class="panel">加载失败: ' + esc(e.message) + '</div>';
+  }
+}
+
+// ===== AI 模型配置 =====
+let llmCfg = null;
+async function loadLLM() {
+  try {
+    llmCfg = await api('/api/llm/config');
+    const box = document.getElementById('llmModels');
+    box.innerHTML = Object.entries(llmCfg.models || {}).map(([key, m]) =>
+      `<div onclick="pickModel('${key}')" id="model-${key}"
+         style="flex:1;min-width:200px;padding:14px;border:2px solid var(--line);border-radius:10px;cursor:pointer;transition:all .15s;${key===llmCfg.model?'border-color:var(--accent);background:var(--accent-soft)':''}">
+        <div style="font-weight:700;font-size:13px;color:${key===llmCfg.model?'var(--accent)':'var(--text)'}">${esc(m.name)}</div>
+        <div style="font-size:11.5px;color:var(--dim);margin-top:4px">${esc(m.desc)}</div>
+        ${key===llmCfg.model?'<div style="font-size:10px;color:var(--accent);margin-top:6px">✓ 当前选中</div>':''}
+      </div>`).join('');
+    msg('msgLLM', llmCfg.available ? '✅ 已配置密钥，AI 引擎就绪' : '⚠️ 未配置密钥', llmCfg.available);
+  } catch(e) {}
+}
+function pickModel(key) {
+  llmCfg = { ...(llmCfg||{}), model: key };
+  document.querySelectorAll('#llmModels > div').forEach(el => {
+    el.style.borderColor = 'var(--line)'; el.style.background = 'transparent';
+  });
+  const el = document.getElementById('model-' + key);
+  if (el) { el.style.borderColor = 'var(--accent)'; el.style.background = 'var(--accent-soft)'; }
+}
+async function saveLLM() {
+  const api_key = document.getElementById('llmKey').value.trim();
+  const model = (llmCfg && llmCfg.model) || 'v4-flash';
+  if (!api_key) return msg('msgLLM2', '请输入 API 密钥', false);
+  msg('msgLLM2', '保存中...', true);
+  try {
+    const r = await api('/api/llm/config', 'POST', { api_key, model });
+    document.getElementById('llmKey').value = '';
+    msg('msgLLM2', `✅ 已保存（模型: ${r.model}），AI 引擎可用`, true);
+    loadLLM();
+  } catch(e) { msg('msgLLM2', '失败: ' + e.message, false); }
+}
+async function testLLM() {
+  msg('msgLLM2', '测试连接中...', true);
+  try {
+    const r = await api('/api/llm/test', 'POST');
+    msg('msgLLM2', `✅ 连接成功: ${r.reply || 'OK'}`, true);
+  } catch(e) { msg('msgLLM2', '连接失败: ' + e.message, false); }
+}
+
+// ===== 一键自动化抓包分析 =====
+async function autoAnalyze() {
+  const btn = document.querySelector('#view-proxy .btn[onclick="autoAnalyze()"]');
+  msg('msgAuto', '⚡ AI 分析中（读取流量 → 识别漏洞 → 生成报告）...', true);
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/api/auto/analyze-traffic', 'POST', { limit: 50 });
+    if (!r.ok) { msg('msgAuto', '❌ ' + r.error, false); return; }
+    msg('msgAuto',
+      `✅ 分析完成: 流量 ${r.analyzed} 条 → 候选 ${r.candidates} → 确认漏洞 ${r.findings} 个（模型: ${r.model}）` +
+      (r.report ? `\n📄 复现报告: ${r.report}` : ''), true);
+    // 自动跳转到数据包分析界面
+    setTimeout(() => { showView('analysis'); loadAnalysis(); }, 600);
+  } catch(e) { msg('msgAuto', '失败: ' + e.message, false); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+init();
+</script>
+</body>
+</html>

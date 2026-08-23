@@ -1,0 +1,68 @@
+# ===== 第三方源码参考（不入仓库） =====
+_vulnclaw_src/
+
+# ===== 临时/杂项 =====
+result.txt
+*.tmp
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec.bak
+
+# ===== 测试与缓存 =====
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# ===== RedHawk 数据（敏感！绝不上传） =====
+data/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+reports/
+*.pid
+
+# ===== 工具二进制（体积大 + 敏感，按需下载） =====
+tools/
+!tools/.gitkeep
+
+# ===== 证书（敏感！绝不上传） =====
+*.crt
+*.key
+*.pem
+*.pfx
+!src/redhawk/static/**/*.crt
+
+# ===== 密钥与凭据 =====
+*.env
+.env
+llm.json
+*api_key*
+*secret*
+*credential*
+
+# ===== 抓包数据（敏感！绝不上传） =====
+traffic_dump/
+*pcap*
+captures/
+
+# ===== 操作系统 =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+
+# ===== 日志 =====
+*.log
+logs/

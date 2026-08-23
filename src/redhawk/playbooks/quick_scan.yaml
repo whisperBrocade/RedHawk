@@ -1,0 +1,19 @@
+# RedHawk quick_scan playbook
+# 一键快速巡检：fscan 资产发现 → nuclei 漏洞验证
+# 加流程 = 加文件，不动代码
+name: quick_scan
+description: 快速巡检：资产发现 + 漏洞验证（10 分钟出结构化结果）
+version: 1.0
+
+stages:
+  - phase: recon
+    tool: fscan
+    options:
+      threads: 100
+      no_brute: true
+
+  - phase: scan
+    tool: nuclei
+    options:
+      severity: high,critical
+      concurrency: 50

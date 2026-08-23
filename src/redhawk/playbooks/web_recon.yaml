@@ -1,0 +1,25 @@
+# RedHawk 公网漏洞挖掘 playbook
+# 互联网目标完整侦察链：子域枚举 → 存活探测 → 漏洞验证
+# 目标填授权域名，如 example.com（须先登记授权范围）
+name: web_recon
+description: 公网漏洞挖掘：子域枚举 + 存活探测 + 漏洞验证（互联网目标）
+version: 1.0
+
+stages:
+  - phase: recon
+    tool: subfinder
+    options:
+      recursive: true
+
+  - phase: recon
+    tool: httpx
+    options:
+      status_code: "200,301,302,403,401,500"
+      title: true
+
+  - phase: scan
+    tool: nuclei
+    options:
+      severity: high,critical
+      concurrency: 50
+      rate_limit: 150
