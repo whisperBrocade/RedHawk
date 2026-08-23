@@ -558,7 +558,7 @@
     }
   })();
 
-  // 鼠标跟随 + 点击特效（红隼风格：红金光点 · 拖尾 · 点击爆散）
+  // 鼠标跟随 + 点击特效（枫叶版：跟随枫叶 · 枫叶拖尾 · 点击爆散枫叶）
   (function () {
     var canvas = document.getElementById('fx');
     if (!canvas) return;
@@ -574,100 +574,107 @@
     window.addEventListener('resize', resize);
 
     var mouse = { x: W / 2, y: H / 2, active: false };
-    var cursor = { x: W / 2, y: H / 2 };       // 光点当前位置（缓动）
-    var TRAIL = [];                             // 拖尾粒子
-    var BURSTS = [];                            // 点击爆散
+    var cursor = { x: W / 2, y: H / 2 };   // 跟随枫叶位置（缓动）
+    var TRAIL = [];                          // 拖尾小枫叶
+    var BURSTS = [];                         // 点击爆散枫叶
     var TICK = 0;
+    var LEAF_COLORS = ['#ff1a1a', '#ff4d4d', '#cc2200', '#ffb800', '#e63900'];
 
-    function spawnBurst(x, y, big) {
-      var n = big ? 26 : 14;
-      var colors = ['#ff1a1a', '#ff4d4d', '#ffb800', '#ffdd00', '#ffffff'];
-      for (var i = 0; i < n; i++) {
-        var a = Math.random() * Math.PI * 2;
-        var sp = 1.5 + Math.random() * (big ? 6.5 : 4.5);
-        BURSTS.push({
-          x: x, y: y,
-          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.6,
-          life: 1, decay: 0.012 + Math.random() * 0.02,
-          size: (big ? 2.6 : 1.8) + Math.random() * 2.2,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          ring: i === 0
-        });
-      }
+    // 画一片枫叶（与背景飘落枫叶同款五角形状）
+    function drawLeaf(x, y, size, rot, color, alpha) {
+      var s = size;
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(rot);
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = color;
+      ctx.strokeStyle = 'rgba(0,0,0,.25)';
+      ctx.lineWidth = Math.max(1, s * 0.06);
+      ctx.beginPath();
+      ctx.moveTo(0, -s * 0.42);
+      ctx.lineTo(s * 0.13, -s * 0.16);
+      ctx.lineTo(s * 0.44, -s * 0.22);
+      ctx.lineTo(s * 0.24, -s * 0.02);
+      ctx.lineTo(s * 0.46, s * 0.10);
+      ctx.lineTo(s * 0.20, s * 0.14);
+      ctx.lineTo(s * 0.16, s * 0.38);
+      ctx.lineTo(0, s * 0.20);
+      ctx.lineTo(-s * 0.16, s * 0.38);
+      ctx.lineTo(-s * 0.20, s * 0.14);
+      ctx.lineTo(-s * 0.46, s * 0.10);
+      ctx.lineTo(-s * 0.24, -s * 0.02);
+      ctx.lineTo(-s * 0.44, -s * 0.22);
+      ctx.lineTo(-s * 0.13, -s * 0.16);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
     }
 
-    function drawRing(x, y, r, color) {
-      ctx.beginPath();
-      ctx.arc(x, y, r, 0, Math.PI * 2);
-      ctx.strokeStyle = color;
-      ctx.lineWidth = 2;
-      ctx.stroke();
+    // 点击：爆散一片小枫叶
+    function spawnBurst(x, y, big) {
+      var n = big ? 14 : 8;
+      for (var i = 0; i < n; i++) {
+        var a = Math.random() * Math.PI * 2;
+        var sp = 1.2 + Math.random() * (big ? 5.5 : 3.8);
+        BURSTS.push({
+          x: x, y: y,
+          vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 0.7,
+          rot: Math.random() * Math.PI * 2,
+          vr: (Math.random() - 0.5) * 0.3,
+          life: 1, decay: 0.014 + Math.random() * 0.018,
+          size: (big ? 11 : 7) + Math.random() * 7,
+          color: LEAF_COLORS[Math.floor(Math.random() * LEAF_COLORS.length)]
+        });
+      }
     }
 
     function frame() {
       TICK++;
       ctx.clearRect(0, 0, W, H);
 
-      // 光点缓动跟随
+      // 跟随枫叶缓动
       cursor.x += (mouse.x - cursor.x) * 0.16;
       cursor.y += (mouse.y - cursor.y) * 0.16;
 
-      // 拖尾粒子
-      if (mouse.active && TICK % 2 === 0) {
+      // 拖尾小枫叶
+      if (mouse.active && TICK % 3 === 0) {
         TRAIL.push({
-          x: cursor.x + (Math.random() - 0.5) * 4,
-          y: cursor.y + (Math.random() - 0.5) * 4,
-          life: 1, decay: 0.045,
-          size: 1.2 + Math.random() * 1.6
+          x: cursor.x + (Math.random() - 0.5) * 6,
+          y: cursor.y + (Math.random() - 0.5) * 6,
+          rot: Math.random() * Math.PI * 2,
+          life: 1, decay: 0.035,
+          size: 4 + Math.random() * 4
         });
-        if (TRAIL.length > 42) TRAIL.shift();
+        if (TRAIL.length > 20) TRAIL.shift();
       }
 
-      // 拖尾绘制
+      // 绘制拖尾
       for (var i = TRAIL.length - 1; i >= 0; i--) {
         var t = TRAIL[i];
         t.life -= t.decay;
         if (t.life <= 0) { TRAIL.splice(i, 1); continue; }
-        ctx.globalAlpha = t.life * 0.55;
-        ctx.fillStyle = Math.random() > 0.5 ? '#ff1a1a' : '#ffb800';
-        ctx.beginPath();
-        ctx.arc(t.x, t.y, t.size * t.life, 0, Math.PI * 2);
-        ctx.fill();
+        drawLeaf(t.x, t.y, t.size * (0.5 + t.life * 0.5), t.rot + TICK * 0.01,
+          LEAF_COLORS[(TICK + i) % LEAF_COLORS.length], t.life * 0.6);
       }
-      ctx.globalAlpha = 1;
 
-      // 光标主光点（红芯 + 金晕）
+      // 主跟随枫叶（红隼主色，缓缓摆动）
       if (mouse.active) {
-        var g = ctx.createRadialGradient(cursor.x, cursor.y, 0, cursor.x, cursor.y, 16);
-        g.addColorStop(0, 'rgba(255,221,0,0.95)');
-        g.addColorStop(0.25, 'rgba(255,26,26,0.55)');
-        g.addColorStop(1, 'rgba(255,26,26,0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(cursor.x, cursor.y, 16, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#ffdd00';
-        ctx.beginPath();
-        ctx.arc(cursor.x, cursor.y, 2.4, 0, Math.PI * 2);
-        ctx.fill();
+        var wob = Math.sin(TICK * 0.05) * 0.12;
+        drawLeaf(cursor.x, cursor.y, 15, wob, '#ff1a1a', 0.9);
       }
 
-      // 点击爆散
+      // 点击爆散枫叶
       for (var j = BURSTS.length - 1; j >= 0; j--) {
         var p = BURSTS[j];
         p.life -= p.decay;
         if (p.life <= 0) { BURSTS.splice(j, 1); continue; }
         p.x += p.vx; p.y += p.vy;
-        p.vy += 0.055;            // 微重力
+        p.vy += 0.05;
         p.vx *= 0.985;
-        ctx.globalAlpha = p.life;
-        ctx.fillStyle = p.color;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * (0.4 + p.life * 0.6), 0, Math.PI * 2);
-        ctx.fill();
-        if (p.ring && TICK % 3 === 0) drawRing(p.x, p.y, (1 - p.life) * 46, 'rgba(255,184,0,' + (p.life * 0.5) + ')');
+        p.rot += p.vr;
+        drawLeaf(p.x, p.y, p.size * (0.4 + p.life * 0.6), p.rot, p.color, p.life);
       }
-      ctx.globalAlpha = 1;
 
       requestAnimationFrame(frame);
     }
