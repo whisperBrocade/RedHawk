@@ -294,7 +294,7 @@
       <div class="msg" id="msgCA"></div>
       <div style="font-size:11.5px;color:var(--dim);margin-top:6px;line-height:1.8">
         💡 <b style="color:var(--text)">安装方法（任选其一）：</b><br/>
-        · 自动：在 <code style="background:var(--card);padding:1px 5px;border-radius:4px">E:\harness work\RedHawk\data\安装CA证书.bat</code> 上右键 → 以管理员身份运行<br/>
+        · 自动：在软件安装目录下的 <code style="background:var(--card);padding:1px 5px;border-radius:4px">data\安装CA证书.bat</code> 上右键 → 以管理员身份运行<br/>
         · 手动：下载 CA → 右键 .crt → 安装证书 → 本地计算机 → 受信任的根证书颁发机构<br/>
         · 装完<b style="color:var(--accent)">重启浏览器</b>，HTTPS 即可解密
       </div>
@@ -552,7 +552,7 @@
         <div>1. 「抓包代理」→ 点「▶ 启动」按钮（按钮会变「■ 停止」+ 绿灯 = 运行中，自动接管系统代理，本机所有应用流量自动进入）</div>
         <div>2. 正常上网/使用软件 → 「流量记录」实时显示抓到的数据包（📋 全部 / 🗂 归类 切换查看）</div>
         <div>3. 点任意一条数据包 → 查看完整请求/响应报文</div>
-        <div>4. <b style="color:var(--text)">想抓 HTTPS 明文</b>：先「🔑 下载 CA 证书」→ 双击 <code style="background:var(--card);padding:1px 5px;border-radius:4px">E:\harness work\RedHawk\data\安装CA证书.bat</code> 以管理员运行 → 重启浏览器</div>
+        <div>4. <b style="color:var(--text)">想抓 HTTPS 明文</b>：先「🔑 下载 CA 证书」→ 双击软件安装目录下 <code style="background:var(--card);padding:1px 5px;border-radius:4px">data\安装CA证书.bat</code> 以管理员运行 → 重启浏览器</div>
         <div>5. 用 SwitchyOmega 等插件：代理协议选 <b style="color:var(--accent)">HTTP</b>，服务器 127.0.0.1，端口 8888（选 HTTPS 会连不上！）</div>
         <div>6. 停止抓包：再点按钮「■ 停止」→ 系统代理自动还原</div>
         <div>7. 若浏览器提示 ERR_PROXY_CONNECTION_FAILED：通常是服务重启后代理丢失，点「▶ 启动」重新开启（新版已支持自动恢复）</div>
