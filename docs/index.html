@@ -291,7 +291,7 @@
     gap: 16px; flex-wrap: wrap;
     margin-top: 26px;
   }
-  .btn-download, .btn-gh {
+  .btn-download {
     display: inline-flex; align-items: center; gap: 9px;
     padding: 14px 34px;
     font-family: var(--mono); font-size: 17px; font-weight: 700;
@@ -315,16 +315,6 @@
     50%      { box-shadow: 0 0 46px rgba(255,26,26,.9), inset 0 0 18px rgba(255,255,255,.14); }
   }
   .btn-download .icon { font-size: 21px; line-height: 1; }
-  .btn-gh {
-    background: #181818; color: var(--text);
-    border: 2px solid #3a3a3a;
-  }
-  .btn-gh:hover {
-    transform: translateY(-3px);
-    border-color: var(--red);
-    box-shadow: 0 0 22px rgba(255,26,26,.4);
-  }
-  .btn-gh .icon { color: var(--red); font-size: 17px; line-height: 1; }
   .cta-note {
     position: relative; z-index: 2;
     text-align: center; margin-top: 12px;
@@ -378,9 +368,6 @@
     <div class="hero-cta">
       <a class="btn-download" href="https://github.com/whisperBrocade/RedHawk" target="_blank" rel="noopener">
         <span class="icon">⬇</span> 立即下载
-      </a>
-      <a class="btn-gh" href="https://github.com/whisperBrocade/RedHawk/releases" target="_blank" rel="noopener">
-        <span class="icon">▸</span> 查看发布版本
       </a>
     </div>
     <div class="cta-note">
