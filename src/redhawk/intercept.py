@@ -203,6 +203,17 @@ class _ProxyHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", "0")
             self.end_headers()
             return
+        # 过滤 Windows 网络探测流量（captiveportal/连通性检测，非真实用户流量）
+        probe_url = self.path.lower()
+        if any(k in probe_url for k in (
+            "captiveportal", "msftconnecttest", "www.msftncsi.com",
+            "connectivity-check", "network-test", "detectportal",
+            "edge-http.microsoft.com",
+        )):
+            self.send_response(204)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         # 目标 URL：代理模式下 path 可能是完整 URL（http://host/）或相对路径（/path）
         if self.path.startswith("http://") or self.path.startswith("https://"):
             url = self.path
@@ -217,9 +228,18 @@ class _ProxyHandler(BaseHTTPRequestHandler):
         req_headers.pop("Proxy-Authorization", None)
 
         try:
+            # 上游代理支持：环境变量 REDHAWK_UPSTREAM_PROXY（如 http://127.0.0.1:7897）
+            # 当前网络需经代理才能出网时配置此项，转发自动走上游
+            import os as _os
+            upstream = _os.environ.get("REDHAWK_UPSTREAM_PROXY", "")
+            opener = urllib.request.build_opener()
+            if upstream:
+                opener = urllib.request.build_opener(
+                    urllib.request.ProxyHandler({"http": upstream, "https": upstream})
+                )
             request = urllib.request.Request(url, data=req_body.encode() if req_body else None,
                                              headers=req_headers, method=method)
-            with urllib.request.urlopen(request, timeout=30) as resp:
+            with opener.open(request, timeout=30) as resp:
                 status = resp.status
                 resp_headers = dict(resp.headers.items())
                 raw = resp.read(MAX_BODY)
