@@ -288,51 +288,51 @@
   .hero-cta {
     position: relative; z-index: 2;
     display: flex; justify-content: center; align-items: center;
-    gap: 18px; flex-wrap: wrap;
-    margin-top: 30px;
+    gap: 22px; flex-wrap: wrap;
+    margin-top: 34px;
   }
   .btn-download, .btn-gh {
-    display: inline-flex; align-items: center; gap: 10px;
-    padding: 16px 34px;
-    font-family: var(--mono); font-size: 16px; font-weight: 700;
-    letter-spacing: 2px; text-decoration: none;
-    border-radius: 4px;
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 22px 52px;
+    font-family: var(--mono); font-size: 22px; font-weight: 700;
+    letter-spacing: 3px; text-decoration: none;
+    border-radius: 6px;
     transition: transform .15s ease, box-shadow .2s ease, background .2s ease;
   }
   .btn-download {
     background: linear-gradient(135deg, #ff1a1a, #b30000);
     color: #fff;
-    border: 1px solid #ff5c5c;
+    border: 2px solid #ff5c5c;
     box-shadow: 0 0 22px rgba(255,26,26,.55), inset 0 0 14px rgba(255,255,255,.08);
     animation: cta-pulse 2.2s ease-in-out infinite;
   }
   .btn-download:hover {
-    transform: translateY(-3px) scale(1.03);
-    box-shadow: 0 0 38px rgba(255,26,26,.85), inset 0 0 18px rgba(255,255,255,.12);
+    transform: translateY(-3px) scale(1.04);
+    box-shadow: 0 0 44px rgba(255,26,26,.9), inset 0 0 18px rgba(255,255,255,.12);
   }
   @keyframes cta-pulse {
     0%, 100% { box-shadow: 0 0 18px rgba(255,26,26,.45), inset 0 0 14px rgba(255,255,255,.08); }
-    50%      { box-shadow: 0 0 40px rgba(255,26,26,.85), inset 0 0 18px rgba(255,255,255,.14); }
+    50%      { box-shadow: 0 0 46px rgba(255,26,26,.9), inset 0 0 18px rgba(255,255,255,.14); }
   }
-  .btn-download .icon { font-size: 22px; line-height: 1; }
+  .btn-download .icon { font-size: 30px; line-height: 1; }
   .btn-gh {
     background: #181818; color: var(--text);
-    border: 1px solid #3a3a3a;
+    border: 2px solid #3a3a3a;
   }
   .btn-gh:hover {
     transform: translateY(-3px);
     border-color: var(--red);
-    box-shadow: 0 0 20px rgba(255,26,26,.35);
+    box-shadow: 0 0 22px rgba(255,26,26,.4);
   }
-  .btn-gh .icon { color: var(--red); font-size: 18px; line-height: 1; }
+  .btn-gh .icon { color: var(--red); font-size: 24px; line-height: 1; }
   .cta-note {
     position: relative; z-index: 2;
-    text-align: center; margin-top: 12px;
-    font-size: 12px; color: var(--dim); letter-spacing: 1px;
+    text-align: center; margin-top: 14px;
+    font-size: 13px; color: var(--dim); letter-spacing: 1px;
   }
   .cta-note code {
     background: #0d0d0d; border: 1px solid var(--line);
-    padding: 2px 8px; font-size: 12px; color: var(--amber);
+    padding: 2px 8px; font-size: 13px; color: var(--amber);
   }
 
   .dsh-badge {
@@ -375,6 +375,18 @@
     <div class="sub">红隼 · 落叶 · <b>万物生歌</b></div>
     <div class="war-cry">🎯 AI 驱动安全工作台 · 抓包 / 发包 / 扫描 / AI 研判 / 复现报告</div>
 
+    <div class="hero-cta">
+      <a class="btn-download" href="https://github.com/whisperBrocade/RedHawk" target="_blank" rel="noopener">
+        <span class="icon">⬇</span> 立即下载
+      </a>
+      <a class="btn-gh" href="https://github.com/whisperBrocade/RedHawk/releases" target="_blank" rel="noopener">
+        <span class="icon">▸</span> 查看发布版本
+      </a>
+    </div>
+    <div class="cta-note">
+      开源 · MIT 许可 · 仓库：<code>github.com/whisperBrocade/RedHawk</code> · 独立版单个程序（Windows）
+    </div>
+
     <div class="falcon">
       <svg viewBox="0 0 220 130" xmlns="http://www.w3.org/2000/svg">
         <g fill="#ff1a1a" stroke="#ff1a1a" stroke-width="1">
@@ -387,18 +399,6 @@
         <path d="M110 44 L115 50 L126 49 L119 55 L126 62 L115 61 L110 70 L105 61 L94 62 L101 55 L94 49 L105 50 Z" fill="#ff4d4d" stroke="#ff1a1a" stroke-width="0.8"/>
         <path d="M110 70 L110 76" stroke="#8b0000" stroke-width="1.4"/>
       </svg>
-    </div>
-
-    <div class="hero-cta">
-      <a class="btn-download" href="https://github.com/whisperBrocade/RedHawk" target="_blank" rel="noopener">
-        <span class="icon">⬇</span> 从 GitHub 下载
-      </a>
-      <a class="btn-gh" href="https://github.com/whisperBrocade/RedHawk/releases" target="_blank" rel="noopener">
-        <span class="icon">▸</span> Releases 发布页
-      </a>
-    </div>
-    <div class="cta-note">
-      开源 · MIT License · 仓库：<code>github.com/whisperBrocade/RedHawk</code> · 独立版单 exe（Windows）
     </div>
 
     <div class="badges">
