@@ -636,6 +636,7 @@
 
     var mouse = { x: W / 2, y: H / 2, active: false };
     var cursor = { x: W / 2, y: H / 2 };   // 跟随枫叶位置（缓动）
+    var cursorRot = 0;                       // 跟随枫叶自转角（动态翻飞）
     var TRAIL = [];                          // 拖尾小枫叶
     var BURSTS = [];                         // 点击爆散枫叶
     var TICK = 0;
@@ -719,10 +720,13 @@
           LEAF_COLORS[(TICK + i) % LEAF_COLORS.length], t.life * 0.6);
       }
 
-      // 主跟随枫叶（红隼主色，缓缓摆动）
+      // 主跟随枫叶（动态翻飞：持续自转 + 横向摇摆 + 上下浮动）
       if (mouse.active) {
-        var wob = Math.sin(TICK * 0.05) * 0.12;
-        drawLeaf(cursor.x, cursor.y, 15, wob, '#ff1a1a', 0.9);
+        cursorRot += 0.055;                                  // 持续自转，模拟风中翻转
+        var sway = Math.sin(TICK * 0.045) * 0.35;            // 横向摇摆
+        var bob = Math.sin(TICK * 0.09) * 3;                 // 上下浮动
+        var pulse = 14 + Math.sin(TICK * 0.1) * 1.5;         // 大小微脉动
+        drawLeaf(cursor.x, cursor.y + bob, pulse, cursorRot + sway, '#ff1a1a', 0.92);
       }
 
       // 点击爆散枫叶
