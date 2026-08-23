@@ -147,13 +147,9 @@ src/
 
 ## 📸 截图
 
-<!-- 上传后替换为真实截图：
-![工作台](docs/screenshot-dashboard.png)
-![抓包](docs/screenshot-proxy.png)
-![AI分析](docs/screenshot-analysis.png)
--->
-
-*(待补充截图 — 欢迎贡献)*
+![工作台-1](docs/screenshots/screenshot-1.png)
+![工作台-2](docs/screenshots/screenshot-2.png)
+![工作台-3](docs/screenshots/screenshot-3.png)
 
 ---
 
