@@ -3,10 +3,11 @@
 生成自签 CA → 为每个访问的域名动态签发证书（缓存）→ 供代理做 TLS 中间人。
 用户需将 CA 证书安装到系统"受信任的根证书颁发机构"，浏览器才会信任。
 
-文件位置：
-  <data>/certs/redhawk-ca.crt     CA 证书（安装到系统信任根）
-  <data>/certs/redhawk-ca.key     CA 私钥（本机保存）
-  <data>/certs/sites/<host>.crt   每个域名的签发证书
+文件位置（固定，见 cert_dir()，与 REDHAWK_DB/CWD/_MEIPASS 无关）：
+  %LOCALAPPDATA%\\RedHawk\\certs\\redhawk-ca.crt   CA 证书（安装到系统信任根）
+  %LOCALAPPDATA%\\RedHawk\\certs\\redhawk-ca.key   CA 私钥（本机保存）
+  %LOCALAPPDATA%\\RedHawk\\certs\\sites\\<host>.crt 每个域名的签发证书
+可用环境变量 REDHAWK_CERT_DIR 覆盖证书目录（测试/定制）。
 """
 
 from __future__ import annotations
@@ -28,13 +29,25 @@ SITE_VALID_DAYS = 365
 
 
 def cert_dir() -> Path:
-    """证书目录：与 llm 配置同数据根。"""
-    db_path = os.environ.get("REDHAWK_DB", "")
-    if db_path:
-        base = Path(db_path).parent
+    """CA 存储目录（固定位置，避免每次启动/换数据根就生成一张不同的 CA）。
+
+    优先级：
+      1) 显式 REDHAWK_CERT_DIR（测试/定制用，指向确切证书目录）
+      2) 用户级固定目录（Windows: %LOCALAPPDATA%\\RedHawk\\certs；其他: ~/.redhawk/certs）
+
+    关键：此目录与 REDHAWK_DB / 当前目录 / PyInstaller(_MEIPASS) 均无关，
+    保证 CA 只生成一次，安装到系统信任根后长期有效，不再出现
+    “浏览器信任的 CA 和代理实际签名的 CA 同名不同钥匙” 的 ERR_CERT_AUTHORITY_INVALID。
+    """
+    override = os.environ.get("REDHAWK_CERT_DIR", "")
+    if override:
+        d = Path(override)
     else:
-        base = Path(__file__).resolve().parent.parent.parent / "data"
-    return base / "certs"
+        local = os.environ.get("LOCALAPPDATA", "")
+        base = (Path(local) / "RedHawk") if local else (Path.home() / ".redhawk")
+        d = base / "certs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
 
 def _load_or_create_ca() -> tuple[Any, Any, Path, Path]:

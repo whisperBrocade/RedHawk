@@ -7,7 +7,7 @@ import tempfile
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # 隔离证书目录
-os.environ["REDHAWK_DB"] = os.path.join(tempfile.mkdtemp(), "test.db")
+os.environ["REDHAWK_CERT_DIR"] = os.path.join(tempfile.mkdtemp(), "certs")
 
 from redhawk.certgen import (
     _load_or_create_ca,

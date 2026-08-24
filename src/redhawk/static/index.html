@@ -552,10 +552,27 @@
         <div>1. 「抓包代理」→ 点「▶ 启动」按钮（按钮会变「■ 停止」+ 绿灯 = 运行中，自动接管系统代理，本机所有应用流量自动进入）</div>
         <div>2. 正常上网/使用软件 → 「流量记录」实时显示抓到的数据包（📋 全部 / 🗂 归类 切换查看）</div>
         <div>3. 点任意一条数据包 → 查看完整请求/响应报文</div>
-        <div>4. <b style="color:var(--text)">想抓 HTTPS 明文</b>：先「🔑 下载 CA 证书」→ 双击软件安装目录下 <code style="background:var(--card);padding:1px 5px;border-radius:4px">data\安装CA证书.bat</code> 以管理员运行 → 重启浏览器</div>
+        <div>4. <b style="color:var(--text)">想抓 HTTPS 明文</b>：先「🔑 下载 CA 证书」并按下方「🔑 安装 CA 证书」一节的方法安装 → <b style="color:var(--accent)">彻底重启浏览器</b></div>
         <div>5. 用 SwitchyOmega 等插件：代理协议选 <b style="color:var(--accent)">HTTP</b>，服务器 127.0.0.1，端口 8888（选 HTTPS 会连不上！）</div>
         <div>6. 停止抓包：再点按钮「■ 停止」→ 系统代理自动还原</div>
         <div>7. 若浏览器提示 ERR_PROXY_CONNECTION_FAILED：通常是服务重启后代理丢失，点「▶ 启动」重新开启（新版已支持自动恢复）</div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🔑 安装 CA 证书（HTTPS 明文解密）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div><b style="color:var(--text)">💡 为什么需要？</b>RedHawk 用自签 CA 做 HTTPS 中间人（动态签发域名证书）。只有把这张 CA 装进系统「受信任的根证书颁发机构」，浏览器才会接受它，否则网址栏报
+          <code style="background:var(--card);padding:1px 5px;border-radius:4px">NET::ERR_CERT_AUTHORITY_INVALID</code>。</div>
+        <div style="margin-top:4px"><b style="color:var(--accent)">方法一 · 一键（推荐）：</b>「抓包代理」→ 点「⚙ 安装 CA 证书」→ 在 UAC 弹窗点「是」，即安装当前证书到系统信任根。</div>
+        <div><b style="color:var(--accent)">方法二 · 脚本（⚠ 需管理员）：</b>右键
+          <code style="background:var(--card);padding:1px 5px;border-radius:4px">data\安装CA证书.bat</code> → <b style="color:var(--accent)">以管理员身份运行</b>（写入「受信任的根证书」需提权；bat 会自动检测，非管理员会提示后退出）；或在项目根执行
+          <code style="background:var(--card);padding:1px 5px;border-radius:4px">fix_ca.ps1</code>（自动清理旧 CA + 安装新 CA，无需管理员）。</div>
+        <div><b style="color:var(--accent)">方法三 · 手动：</b>「🔑 下载 CA 证书」→ 右键 .crt → 安装证书 → 选择
+          <b style="color:var(--text)">本地计算机</b> → 受信任的根证书颁发机构 → 完成。</div>
+        <div style="margin-top:4px;color:var(--accent)">✅ 装完必须<b style="color:var(--accent)">彻底重启浏览器</b>（关掉所有窗口再开），HTTPS 流量即可解密。</div>
+        <div style="margin-top:4px">⚠️ <b style="color:var(--text)">常见问题：</b>之前装过旧 CA 仍报 <code>NET::ERR_CERT_AUTHORITY_INVALID</code>，多是「信任根里的 CA」与「代理当前签名的 CA」同名不同钥匙。运行
+          <code style="background:var(--card);padding:1px 5px;border-radius:4px">fix_ca.ps1</code> 会自动清理旧同名 CA 并重装新 CA，然后重启浏览器即可。</div>
       </div>
     </div>
 
