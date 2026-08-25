@@ -86,6 +86,7 @@ def _load_or_create_ca() -> tuple[Any, Any, Path, Path]:
             digital_signature=True, content_commitment=False, key_encipherment=True,
             data_encipherment=False, key_agreement=False, key_cert_sign=True,
             crl_sign=True, encipher_only=False, decipher_only=False), critical=True)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
         .sign(key, hashes.SHA256())
     )
     crt_path.write_bytes(cert.public_bytes(serialization.Encoding.PEM))
@@ -117,6 +118,11 @@ def _build_site_cert(host: str, ca_cert: Any, ca_key: Any, sites_dir: Path) -> P
         .not_valid_before(now - timedelta(days=1))
         .not_valid_after(now + timedelta(days=SITE_VALID_DAYS))
         .add_extension(x509.SubjectAlternativeName(sans), critical=False)
+        .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+        .add_extension(
+            x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_key.public_key()),
+            critical=False,
+        )
         .sign(ca_key, hashes.SHA256())
     )
     crt_path = sites_dir / f"{host.replace('*', '_').replace(':', '_')}.crt"

@@ -349,13 +349,43 @@ def cleanup(
 
 
 # =============== web ===============
+def _port_free(port: int) -> bool:
+    """探测本机端口是否可绑定（False = 被占用）。"""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.bind(("127.0.0.1", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
 @app.command()
 def web(
     port: int = typer.Option(7788, "--port", help="监听端口"),
     db_path: str = typer.Option(DEFAULT_DB, "--db"),
 ):
-    """启动 Web 控制台（默认 http://127.0.0.1:7788）"""
+    """启动 Web 控制台（默认 http://127.0.0.1:7788）
+
+    启动前自动检测端口占用：若 7788 被 RedHawk 残留进程占用则自动清理
+    （对齐桌面版行为），非 RedHawk 进程占用则明确报错退出。
+    """
     import os
+    if not _port_free(port):
+        # 先尝试自动清理占用 8888/7788 的 RedHawk 残留进程
+        from redhawk.cleanup import cleanup as do_cleanup
+        r = do_cleanup()
+        if r["killed_count"]:
+            typer.echo(f"[*] 已自动清理 {r['killed_count']} 个残留进程（占用 RedHawk 端口），重新尝试绑定 {port}")
+        if not _port_free(port):
+            typer.secho(
+                f"[!] 端口 {port} 仍被占用（非 RedHawk 残留进程，cleanup 已跳过）。"
+                f"请关闭占用程序后重试，或用 --port 换端口。",
+                fg=typer.colors.RED,
+            )
+            raise typer.Exit(1)
     os.environ["REDHAWK_DB"] = db_path
     os.environ.setdefault("REDHAWK_TOOLS", _tools_dir())
     from redhawk.web import main as web_main

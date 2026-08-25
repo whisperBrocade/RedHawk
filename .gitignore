@@ -1,4 +1,4 @@
-# ===== 第三方源码参考（不入仓库） =====
+# ===== 第三方源码参考（不入仓库�?=====
 _vulnclaw_src/
 
 # ===== 临时/杂项 =====
@@ -14,13 +14,13 @@ build/
 dist/
 *.spec.bak
 
-# ===== 测试与缓存 =====
+# ===== 测试与缓�?=====
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 
-# ===== RedHawk 数据（敏感！绝不上传） =====
+# ===== RedHawk 数据（敏感！绝不上传�?=====
 data/
 *.db
 *.db-shm
@@ -29,18 +29,18 @@ data/
 reports/
 *.pid
 
-# ===== 工具二进制（体积大 + 敏感，按需下载） =====
+# ===== 工具二进制（体积�?+ 敏感，按需下载�?=====
 tools/
 !tools/.gitkeep
 
-# ===== 证书（敏感！绝不上传） =====
+# ===== 证书（敏感！绝不上传�?=====
 *.crt
 *.key
 *.pem
 *.pfx
 !src/redhawk/static/**/*.crt
 
-# ===== 密钥与凭据 =====
+# ===== 密钥与凭�?=====
 *.env
 .env
 llm.json
@@ -48,7 +48,7 @@ llm.json
 *secret*
 *credential*
 
-# ===== 抓包数据（敏感！绝不上传） =====
+# ===== 抓包数据（敏感！绝不上传�?=====
 traffic_dump/
 *pcap*
 captures/
@@ -66,3 +66,6 @@ desktop.ini
 # ===== 日志 =====
 *.log
 logs/
+
+# ===== pytest workspace tmp (sandbox) =====
+src/tests/.test_tmp/

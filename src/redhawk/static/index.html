@@ -560,6 +560,17 @@
     </div>
 
     <div class="panel">
+      <h3>🌐 出网代理（可选 · 需经代理才能访问外网时设置）</h3>
+      <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
+        <div><b style="color:var(--text)">什么时候需要？</b>本机必须经 HTTP 代理才能出网时（公司代理 / 科学上网工具如 7897 等）。此时 RedHawk 代理转发外网请求也必须走这条路，否则会<b style="color:var(--accent)">直连失败 → 大量 502</b>（浏览器/应用会自动重试，流量记录里出现同一 URL 连续多条 502，如微软 CDN 更新流量）。</div>
+        <div style="margin-top:4px"><b style="color:var(--accent)">设置方法</b>：启动前设置环境变量 <code style="background:var(--card);padding:1px 5px;border-radius:4px">REDHAWK_UPSTREAM_PROXY</code>（端口换成你的实际代理端口）：</div>
+        <div style="margin-top:4px"><b style="color:var(--text)">CMD：</b><code style="background:var(--card);padding:1px 5px;border-radius:4px">set REDHAWK_UPSTREAM_PROXY=http://127.0.0.1:7897 &amp;&amp; rh web</code></div>
+        <div><b style="color:var(--text)">PowerShell：</b><code style="background:var(--card);padding:1px 5px;border-radius:4px">$env:REDHAWK_UPSTREAM_PROXY="http://127.0.0.1:7897"; rh web</code></div>
+        <div style="margin-top:4px">✅ 设置后外网流量经代理出网，不再 502；目标可直连时不设置也不受影响。清除该环境变量即恢复直连。</div>
+      </div>
+    </div>
+
+    <div class="panel">
       <h3>🔑 安装 CA 证书（HTTPS 明文解密）</h3>
       <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
         <div><b style="color:var(--text)">💡 为什么需要？</b>RedHawk 用自签 CA 做 HTTPS 中间人（动态签发域名证书）。只有把这张 CA 装进系统「受信任的根证书颁发机构」，浏览器才会接受它，否则网址栏报
@@ -625,7 +636,7 @@
     <div class="panel">
       <h3>🧹 常用维护</h3>
       <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
-        <div>· 端口被占用/代理启动失败 → 「抓包代理」→「🧹 清理残留进程」</div>
+        <div>· 端口被占用/代理启动失败 → 重新启动 <code>rh web</code> 会自动清理残留进程；也可「抓包代理」→「🧹 清理残留进程」手动清理</div>
         <div>· 服务重启后代理自动恢复（检测系统代理指向 8888 自动拉起）</div>
         <div>· 查看所有操作记录 → 「审计日志」</div>
         <div>· 主题切换 → 左下角 ☀白 / 🕯暖 / 🌑红黑</div>
@@ -890,13 +901,44 @@ async function loadTraffic() {
     const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
     const rows = await api('/api/traffic?limit=60&source=' + encodeURIComponent(src));
     const tb = document.querySelector('#tblTraffic tbody');
-    tb.innerHTML = rows.map(t =>
-      `<tr class="traffic-row" onclick="showTrafficDetail(${t.id})">
-        <td>#${t.id}</td><td><b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'}">${t.method}</b></td>
-        <td>${esc(t.url.slice(0,80))}</td>
-        <td><span class="sev ${t.status>=500?'critical':(t.status>=400?'high':(t.status>=300?'medium':'low'))}">${t.status}</span></td>
-        <td><span class="badge">${t.source}</span></td><td style="color:var(--dim)">${t.created_at}</td>
-      </tr>`).join('') || '<tr><td colspan="6" class="empty">无流量记录 — 启动抓包代理或使用发包工具</td></tr>';
+    // 按 URL 分组：相同 URL 折叠为一行，点击展开看明细（更清晰整洁）
+    const groups = [];
+    const gidx = new Map();
+    for (const t of rows) {
+      const key = t.url;
+      if (!gidx.has(key)) { gidx.set(key, groups.length); groups.push({ url: key, items: [] }); }
+      groups[gidx.get(key)].items.push(t);
+    }
+    tb.innerHTML = groups.map((g, gi) => {
+      const collapsed = g.items.length > 1;
+      const last = g.items[g.items.length - 1];   // 最新一条（倒序加载，第一个是最新）
+      const first = g.items[0];
+      const rowClick = collapsed ? `toggleTrafficGroup(${gi})` : `showTrafficDetail(${first.id})`;
+      const caret = collapsed ? (g.items.length > 1 ? '▸' : '') : '';
+      return `
+        <tr class="traffic-row" onclick="${rowClick}" title="${collapsed ? '点击展开 ' + g.items.length + ' 条记录' : '查看详情'}">
+          <td>#${last.id}${collapsed ? '…' : ''}</td>
+          <td><b style="color:${last.method==='GET'?'#2f9e44':'var(--accent)'}">${last.method}</b></td>
+          <td>
+            <span style="color:var(--dim);font-size:10.5px;margin-right:4px">${caret}</span>
+            ${esc(g.url.slice(0,80))}
+            ${collapsed ? `<span class="badge" style="background:var(--accent-soft);color:var(--accent);margin-left:6px">×${g.items.length}</span>` : ''}
+          </td>
+          <td><span class="sev ${last.status>=500?'critical':(last.status>=400?'high':(last.status>=300?'medium':'low'))}">${last.status}</span></td>
+          <td><span class="badge">${last.source}</span></td>
+          <td style="color:var(--dim)">${last.created_at}</td>
+        </tr>
+        ${collapsed ? `<tr class="hidden" id="tg-${gi}"><td colspan="6" style="padding:0;background:var(--accent-soft)22">
+          ${g.items.map(t =>
+            `<div onclick="event.stopPropagation();showTrafficDetail(${t.id})" style="cursor:pointer;display:flex;gap:8px;padding:6px 12px 6px 34px;font-size:12px;border-bottom:1px solid var(--line);align-items:center">
+              <span style="color:var(--dim);min-width:52px">#${t.id}</span>
+              <b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'};min-width:46px">${t.method}</b>
+              <span class="sev ${t.status>=500?'critical':(t.status>=400?'high':(t.status>=300?'medium':'low'))}" style="min-width:36px">${t.status}</span>
+              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${esc(t.url.slice(0,90))}</span>
+              <span style="color:var(--dim);font-size:10.5px">${t.created_at}</span>
+            </div>`).join('')}
+        </td></tr>` : ''}`;
+    }).join('') || '<tr><td colspan="6" class="empty">无流量记录 — 启动抓包代理或使用发包工具</td></tr>';
     const recent = document.getElementById('proxyRecent');
     if (recent) {
       recent.innerHTML = rows.slice(0,10).map(t =>
@@ -906,6 +948,10 @@ async function loadTraffic() {
         </div>`).join('') || '<div class="empty">暂无</div>';
     }
   } catch(e) {}
+}
+function toggleTrafficGroup(gi) {
+  const el = document.getElementById('tg-' + gi);
+  if (el) el.classList.toggle('hidden');
 }
 async function showTrafficDetail(id) {
   try {
