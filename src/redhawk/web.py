@@ -79,6 +79,21 @@ def _auto_restore_proxy():
         pass
 
 
+# 退出时停止代理并还原系统代理：
+# 用户"直接关闭软件（不点停止）"时，若代理仍在运行且接管了系统代理，
+# 必须还原，否则系统代理残留指向 8888 而代理已死 → ERR_PROXY_CONNECTION_FAILED
+@app.on_event("shutdown")
+def _auto_stop_proxy():
+    global _proxy  # noqa: F821
+    p = _proxy
+    _proxy = None
+    if p is not None:
+        try:
+            p.stop()   # ProxyListener.close() 内还原系统代理（恢复接管前的原设置）
+        except Exception:
+            pass
+
+
 # ---------------- 配置 ----------------
 DB_PATH = os.environ.get("REDHAWK_DB", "redhawk.db")
 TOOLS_DIR = os.environ.get("REDHAWK_TOOLS", "tools")

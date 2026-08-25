@@ -76,13 +76,17 @@ def set_system_proxy(port: int) -> dict:
     return {"ok": ok, "previous": prev}
 
 
-def restore_system_proxy() -> dict:
-    """还原系统代理（关闭，或恢复原 server）。"""
-    prev = _read_sys_proxy()
-    if prev["server"] and prev["server"] != "":
-        # 若之前是别的代理，先关闭（简化：统一关闭，用户可自行恢复）
-        pass
-    ok = _write_sys_proxy(False, "")
+def restore_system_proxy(prev: dict | None = None) -> dict:
+    """还原系统代理。
+
+    prev：set_system_proxy 返回的 previous（接管前的原设置）。
+      - prev 且原为启用 → 恢复原 server（不误伤用户原有代理配置）
+      - 否则 → 关闭系统代理（ProxyEnable=0）
+    """
+    if prev and prev.get("enabled"):
+        ok = _write_sys_proxy(True, prev.get("server", ""))
+    else:
+        ok = _write_sys_proxy(False, "")
     return {"ok": ok, "was": prev}
 
 

@@ -32,6 +32,7 @@ class ProxyListener:
         self.take_system_proxy = take_system_proxy
         self._server: asyncio.AbstractServer | None = None
         self._sys_proxy_taken = False
+        self._sys_proxy_prev: dict | None = None   # 接管前的系统代理原设置
 
     async def serve(self) -> None:
         self._server = await asyncio.start_server(
@@ -43,8 +44,11 @@ class ProxyListener:
                 from redhawk.intercept import set_system_proxy
                 r = set_system_proxy(self.port)
                 self._sys_proxy_taken = bool(r.get("ok", False))
+                if self._sys_proxy_taken:
+                    self._sys_proxy_prev = r.get("previous")
             except Exception:
                 self._sys_proxy_taken = False
+                self._sys_proxy_prev = None
 
     async def close(self) -> None:
         if self._server:
@@ -57,10 +61,12 @@ class ProxyListener:
         if self._sys_proxy_taken:
             try:
                 from redhawk.intercept import restore_system_proxy
-                restore_system_proxy()
+                # 恢复接管前的原设置（原为启用则还原原 server，避免误关用户自己的代理）
+                restore_system_proxy(self._sys_proxy_prev)
             except Exception:
                 pass
             self._sys_proxy_taken = False
+            self._sys_proxy_prev = None
 
     # ---------- 客户端连接 ----------
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
