@@ -59,14 +59,28 @@ class ProxyListener:
                 pass
             self._server = None
         if self._sys_proxy_taken:
+            # 自己接管的系统代理 → 恢复接管前的原设置
             try:
                 from redhawk.intercept import restore_system_proxy
-                # 恢复接管前的原设置（原为启用则还原原 server，避免误关用户自己的代理）
                 restore_system_proxy(self._sys_proxy_prev)
             except Exception:
                 pass
             self._sys_proxy_taken = False
             self._sys_proxy_prev = None
+        else:
+            # 兜底：未接管（自动拉起/历史残留）但系统代理仍指向本代理端口
+            # （如 _auto_restore_proxy 拉起的代理、或上次异常退出留下的残留）
+            # → 停止时清除，否则下次启动又自动拉起 → 永远"运行中"
+            try:
+                from redhawk.intercept import _read_sys_proxy, _write_sys_proxy
+                cfg = _read_sys_proxy()
+                if cfg.get("enabled"):
+                    server = cfg.get("server", "") or ""
+                    # 精确匹配本代理端口（127.0.0.1:7897 等用户自己的代理不动）
+                    if server in (f"127.0.0.1:{self.port}", f"localhost:{self.port}"):
+                        _write_sys_proxy(False, "")
+            except Exception:
+                pass
 
     # ---------- 客户端连接 ----------
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:

@@ -277,6 +277,101 @@ def test_proxy_lifecycle(tmp_path):
     p.stop()
 
 
+# ================= 系统代理接管/还原 =================
+def test_stop_restores_system_proxy(tmp_path, monkeypatch):
+    """stop 必须调用 restore_system_proxy（还原接管前的原设置）。"""
+    calls = []
+    import redhawk.intercept as I
+
+    def fake_set(port):
+        calls.append(("set", port))
+        return {"ok": True, "previous": {"enabled": False, "server": ""}}
+
+    def fake_restore(prev=None):
+        calls.append(("restore", prev))
+        return {"ok": True, "was": prev}
+
+    monkeypatch.setattr(I, "set_system_proxy", fake_set)
+    monkeypatch.setattr(I, "restore_system_proxy", fake_restore)
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = ProxyServer(db, port=free_port(), take_system_proxy=True)
+    r = p.start()
+    assert r["status"] == "running"
+    assert ("set", p.port) in calls, f"启动应接管系统代理: {calls}"
+    p.stop()
+    db.close()
+    assert ("restore", {"enabled": False, "server": ""}) in calls, \
+        f"stop 应还原系统代理（恢复接管前原设置）: {calls}"
+
+
+def test_stop_restores_previous_proxy_config(tmp_path, monkeypatch):
+    """接管前用户已有代理时，stop 应恢复原代理而非关闭。"""
+    calls = []
+    import redhawk.intercept as I
+
+    def fake_set(port):
+        calls.append(("set", port))
+        return {"ok": True, "previous": {"enabled": True, "server": "127.0.0.1:7897"}}
+
+    def fake_restore(prev=None):
+        calls.append(("restore", prev))
+        return {"ok": True, "was": prev}
+
+    monkeypatch.setattr(I, "set_system_proxy", fake_set)
+    monkeypatch.setattr(I, "restore_system_proxy", fake_restore)
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = ProxyServer(db, port=free_port(), take_system_proxy=True)
+    p.start()
+    p.stop()
+    db.close()
+    assert ("restore", {"enabled": True, "server": "127.0.0.1:7897"}) in calls, \
+        f"应恢复用户原代理配置: {calls}"
+
+
+def test_close_cleans_stale_proxy_pointing_to_self(tmp_path, monkeypatch):
+    """自动拉起（take_system_proxy=False）+ 系统代理残留指向本代理端口：
+    stop 时应清除残留，否则下次启动又自动拉起（永远运行中）。"""
+    calls = []
+    import redhawk.intercept as I
+    port = free_port()
+
+    monkeypatch.setattr(I, "_read_sys_proxy",
+                        lambda: {"enabled": True, "server": f"127.0.0.1:{port}"})
+    monkeypatch.setattr(I, "_write_sys_proxy",
+                        lambda enabled, server: calls.append(("write", enabled, server)) or True)
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = ProxyServer(db, port=port, take_system_proxy=False)  # 模拟 _auto_restore_proxy 拉起
+    assert p.start()["status"] == "running"
+    p.stop()
+    db.close()
+    assert ("write", False, "") in calls, f"应清除指向本代理端口的残留系统代理: {calls}"
+
+
+def test_close_preserves_unrelated_system_proxy(tmp_path, monkeypatch):
+    """未接管且系统代理指向别的地址（用户自己的代理）→ stop 不应误动。"""
+    calls = []
+    import redhawk.intercept as I
+
+    monkeypatch.setattr(I, "_read_sys_proxy",
+                        lambda: {"enabled": True, "server": "127.0.0.1:7897"})
+    monkeypatch.setattr(I, "_write_sys_proxy",
+                        lambda enabled, server: calls.append(("write", enabled, server)) or True)
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = ProxyServer(db, port=free_port(), take_system_proxy=False)
+    p.start()
+    p.stop()
+    db.close()
+    assert calls == [], f"不应误动用户自己的代理配置: {calls}"
+
+
 # ================= 上游代理（REDHAWK_UPSTREAM_PROXY） =================
 class _UpstreamProxyHandler(BaseHTTPRequestHandler):
     """简易上游代理：绝对 URL 转发（HTTP）+ CONNECT 隧道（HTTPS）。"""
