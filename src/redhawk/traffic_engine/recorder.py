@@ -17,6 +17,18 @@ from redhawk.db import DB
 # 单条报文记录上限（v1 语义）。W3 起超过部分转 content-addressed blob。
 MAX_BODY = 2 * 1024 * 1024
 
+# 浏览器 UA 特征（区分"用户主动浏览"与"后台程序自动流量"）
+BROWSER_UA_PATTERNS = [
+    "%user-agent%chrome%",
+    "%user-agent%edg%",
+    "%user-agent%firefox%",
+    "%user-agent%safari%",
+    "%user-agent%opera%",
+    "%user-agent%opr%",
+    "%user-agent%trident%",
+    "%user-agent%msie%",
+]
+
 
 def save_traffic(
     db: DB,
@@ -42,18 +54,41 @@ def save_traffic(
     })
 
 
-def list_traffic(db: DB, limit: int = 50, source: str | None = None) -> list[dict]:
-    sql = "SELECT id, method, url, status, source, created_at FROM traffic"
+def _client_conditions(client: str | None, params: list) -> str:
+    """按客户端类型拼过滤条件：
+    - browser：浏览器 UA（用户主动访问，流量记录）
+    - other：非浏览器 UA（后台程序/系统服务自动流量，流量劫取）
+    返回 SQL 片段（含占位符），并扩充 params。
+    """
+    if client not in ("browser", "other"):
+        return ""
+    ua_cond = "(" + " OR ".join("req_headers LIKE ?" for _ in BROWSER_UA_PATTERNS) + ")"
+    if client == "browser":
+        params.extend(BROWSER_UA_PATTERNS)
+        return ua_cond
+    params.extend(BROWSER_UA_PATTERNS)
+    return "NOT " + ua_cond
+
+
+def list_traffic(db: DB, limit: int = 50, source: str | None = None,
+                 client: str | None = None) -> list[dict]:
+    """查询流量。source 支持逗号分隔多来源；client 支持 browser/other（按 UA 区分）。"""
+    conds: list = []
     params: list = []
     if source:
-        # 支持逗号分隔多来源：source=proxy,proxy_https
         srcs = [s.strip() for s in source.split(",") if s.strip()]
         if len(srcs) == 1:
-            sql += " WHERE source=?"
+            conds.append("source=?")
             params.append(srcs[0])
         elif srcs:
-            sql += " WHERE source IN (" + ",".join("?" * len(srcs)) + ")"
+            conds.append("source IN (" + ",".join("?" * len(srcs)) + ")")
             params.extend(srcs)
+    c = _client_conditions(client, params)
+    if c:
+        conds.append(c)
+    sql = "SELECT id, method, url, status, source, created_at FROM traffic"
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)
     return db.query(sql, tuple(params))

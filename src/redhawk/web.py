@@ -323,9 +323,10 @@ def proxy_status():
 
 # ---------------- 流量 ----------------
 @app.get("/api/traffic")
-def traffic_list(limit: int = 50, source: str | None = None):
+def traffic_list(limit: int = 50, source: str | None = None, client: str | None = None):
+    """流量查询。source 逗号分隔多来源；client=browser（用户主动浏览）/ other（后台自动）。"""
     db, _, _ = _get_services()
-    rows = list_traffic(db, limit, source)
+    rows = list_traffic(db, limit, source, client)
     db.close()
     return rows
 
@@ -341,11 +342,11 @@ def traffic_detail(traffic_id: int):
 
 
 @app.get("/api/traffic-categories")
-def traffic_cats(limit: int = 200, source: str | None = None):
-    """流量归类：同类型分组列表。"""
+def traffic_cats(limit: int = 200, source: str | None = None, client: str | None = None):
+    """流量归类：同类型分组列表。source/client 同 /api/traffic。"""
     db, _, _ = _get_services()
     from redhawk.intercept import traffic_categories
-    cats = traffic_categories(db, limit=limit, source=source)
+    cats = traffic_categories(db, limit=limit, source=source, client=client)
     db.close()
     return {"categories": cats, "total_groups": len(cats)}
 

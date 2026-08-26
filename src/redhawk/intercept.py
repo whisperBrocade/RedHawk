@@ -149,18 +149,27 @@ def classify_traffic(t: dict) -> str:
     return "其他"
 
 
-def traffic_categories(db: DB, limit: int = 200, source: str | None = None) -> list[dict]:
-    """按类别分组统计流量（同类型归类列表）。source 支持逗号分隔多来源。"""
-    sql = "SELECT id, method, url, status, resp_headers, source, created_at FROM traffic"
+def traffic_categories(db: DB, limit: int = 200, source: str | None = None,
+                       client: str | None = None) -> list[dict]:
+    """按类别分组统计流量（同类型归类列表）。source/client 支持过滤。"""
+    from redhawk.traffic_engine.recorder import _client_conditions
+
+    conds: list = []
     params: list = []
     if source:
         srcs = [s.strip() for s in source.split(",") if s.strip()]
         if len(srcs) == 1:
-            sql += " WHERE source=?"
+            conds.append("source=?")
             params.append(srcs[0])
         elif srcs:
-            sql += " WHERE source IN (" + ",".join("?" * len(srcs)) + ")"
+            conds.append("source IN (" + ",".join("?" * len(srcs)) + ")")
             params.extend(srcs)
+    c = _client_conditions(client, params)
+    if c:
+        conds.append(c)
+    sql = "SELECT id, method, url, status, resp_headers, source, created_at FROM traffic"
+    if conds:
+        sql += " WHERE " + " AND ".join(conds)
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)
     rows = db.query(sql, tuple(params))

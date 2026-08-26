@@ -356,17 +356,17 @@
   <!-- 流量记录 -->
   <div class="view hidden" id="view-traffic">
     <div class="view-title">流量记录</div>
-    <div class="view-desc">手动发包产生的请求/响应记录（Repeater 构造）。代理自动捕获的流量请查看「⚡ 流量劫取」。</div>
+    <div class="view-desc">你在浏览器中访问 URL 产生的数据包（含手动发包）。后台程序自动产生的流量请查看「⚡ 流量劫取」。</div>
     <div class="panel">
       <div class="flex-h">
         <button class="btn small" onclick="loadTraffic()">刷新</button>
         <button class="btn small ghost" onclick="showTrafficView('list')" id="tvListBtn">📋 全部</button>
         <button class="btn small ghost" onclick="showTrafficView('cat')" id="tvCatBtn">🗂 归类</button>
-        <label style="margin:0 0 0 8px">来源</label>
-        <select id="trafficSource" style="width:130px" onchange="loadTraffic()">
-          <option value="repeater" selected>发包记录</option>
-          <option value="">全部</option>
-          <option value="proxy,proxy_https">代理抓包</option>
+        <label style="margin:0 0 0 8px">范围</label>
+        <select id="trafficSource" style="width:160px" onchange="loadTraffic()">
+          <option value="" selected>浏览器 + 发包</option>
+          <option value="browser">仅浏览器访问</option>
+          <option value="repeater">仅发包记录</option>
         </select>
       </div>
       <div id="trafficList">
@@ -379,16 +379,16 @@
     </div>
   </div>
 
-  <!-- 流量劫取：代理运行时自动捕获 -->
+  <!-- 流量劫取：运行时自动识别的数据包（后台程序/系统服务/应用内请求） -->
   <div class="view hidden" id="view-intercept">
     <div class="view-title">⚡ 流量劫取</div>
-    <div class="view-desc">代理运行时自动捕获的流量（HTTP + HTTPS 解密）。手动发包请查看「流量记录」。</div>
+    <div class="view-desc">程序运行时自动产生的数据包（非浏览器客户端：后台更新、证书检查、遥测、应用内请求等，按 User-Agent 自动识别）。浏览器访问流量请查看「流量记录」。</div>
     <div class="panel">
       <div class="flex-h">
         <button class="btn small" onclick="loadIntercept()">刷新</button>
         <button class="btn small ghost" onclick="showInterceptView('list')" id="ivListBtn">📋 全部</button>
         <button class="btn small ghost" onclick="showInterceptView('cat')" id="ivCatBtn">🗂 归类</button>
-        <span style="color:var(--dim);font-size:11.5px;margin-left:8px">来源：代理抓包 + HTTPS 解密</span>
+        <span style="color:var(--dim);font-size:11.5px;margin-left:8px">自动识别：非浏览器客户端流量</span>
       </div>
       <div id="interceptList">
         <table id="tblIntercept" style="margin-top:10px">
@@ -907,13 +907,21 @@ function showTrafficView(view) {
   document.getElementById('trafficCat').classList.toggle('hidden', !isCat);
   document.getElementById('tvListBtn').classList.toggle('ghost', isCat);
   document.getElementById('tvCatBtn').classList.toggle('ghost', !isCat);
-  const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
-  if (isCat) loadCategories(src, 'trafficCat');
+  if (isCat) loadTrafficCats();
   else loadTraffic();
 }
-async function loadCategories(src, boxId) {
+// 流量记录归类：按范围 select 语义过滤
+async function loadTrafficCats() {
+  const sel = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
+  if (sel === 'browser') loadCategories('proxy,proxy_https', 'trafficCat', 'browser');
+  else if (sel === 'repeater') loadCategories('repeater', 'trafficCat', '');
+  else loadCategories('', 'trafficCat', '');
+}
+async function loadCategories(src, boxId, client) {
   try {
-    const r = await api('/api/traffic-categories?limit=200&source=' + encodeURIComponent(src));
+    const url = '/api/traffic-categories?limit=200&source=' + encodeURIComponent(src) +
+      (client ? '&client=' + encodeURIComponent(client) : '');
+    const r = await api(url);
     const box = document.getElementById(boxId);
     if (!r.categories || !r.categories.length) {
       box.innerHTML = '<div class="empty">暂无流量</div>';
@@ -976,8 +984,20 @@ function renderTrafficRows(tb, rows) {
 }
 async function loadTraffic() {
   try {
-    const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
-    const rows = await api('/api/traffic?limit=60&source=' + encodeURIComponent(src));
+    const sel = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
+    let rows = [];
+    if (sel === 'repeater') {
+      rows = await api('/api/traffic?limit=60&source=repeater');
+    } else if (sel === 'browser') {
+      rows = await api('/api/traffic?limit=60&source=proxy,proxy_https&client=browser');
+    } else {
+      // 浏览器访问 + 手动发包
+      const [a, b] = await Promise.all([
+        api('/api/traffic?limit=60&source=proxy,proxy_https&client=browser'),
+        api('/api/traffic?limit=60&source=repeater'),
+      ]);
+      rows = a.concat(b).sort((x, y) => y.id - x.id).slice(0, 60);
+    }
     const tb = document.querySelector('#tblTraffic tbody');
     renderTrafficRows(tb, rows);
     const recent = document.getElementById('proxyRecent');
@@ -995,19 +1015,19 @@ function toggleTrafficGroup(gi) {
   if (el) el.classList.toggle('hidden');
 }
 
-// ===== 流量劫取（代理自动捕获） =====
+// ===== 流量劫取（运行时自动识别的非浏览器流量） =====
 function showInterceptView(view) {
   const isCat = view === 'cat';
   document.getElementById('interceptList').classList.toggle('hidden', isCat);
   document.getElementById('interceptCat').classList.toggle('hidden', !isCat);
   document.getElementById('ivListBtn').classList.toggle('ghost', isCat);
   document.getElementById('ivCatBtn').classList.toggle('ghost', !isCat);
-  if (isCat) loadCategories('proxy,proxy_https', 'interceptCat');
+  if (isCat) loadCategories('proxy,proxy_https', 'interceptCat', 'other');
   else loadIntercept();
 }
 async function loadIntercept() {
   try {
-    const rows = await api('/api/traffic?limit=60&source=proxy,proxy_https');
+    const rows = await api('/api/traffic?limit=60&source=proxy,proxy_https&client=other');
     const tb = document.querySelector('#tblIntercept tbody');
     renderTrafficRows(tb, rows);
   } catch(e) {}

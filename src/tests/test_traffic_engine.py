@@ -458,6 +458,28 @@ def test_traffic_categories_multi_source(tmp_path):
     db.close()
 
 
+def test_list_traffic_client_filter(tmp_path):
+    """client=browser/other 按 User-Agent 区分用户浏览与后台自动流量。"""
+    from redhawk.traffic_engine.recorder import list_traffic, save_traffic
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    # 浏览器 UA（用户主动访问）
+    save_traffic(db, "GET", "http://site/", {"User-Agent": "Mozilla/5.0 ... Chrome/126.0"}, "",
+                 200, {}, "x", "proxy")
+    # 后台程序 UA（自动流量）
+    save_traffic(db, "GET", "http://cdn/update", {"User-Agent": "Microsoft BITS/7.8"}, "",
+                 200, {}, "x", "proxy")
+    # 无 UA（后台）
+    save_traffic(db, "GET", "http://pki/crl.crl", {}, "", 200, {}, "x", "proxy_https")
+
+    browser = list_traffic(db, limit=50, source="proxy,proxy_https", client="browser")
+    assert [r["url"] for r in browser] == ["http://site/"]
+    other = list_traffic(db, limit=50, source="proxy,proxy_https", client="other")
+    assert {r["url"] for r in other} == {"http://cdn/update", "http://pki/crl.crl"}
+    db.close()
+
+
 # ================= 系统代理接管/还原 =================
 def test_stop_restores_system_proxy(tmp_path, monkeypatch):
     """stop 必须调用 restore_system_proxy（还原接管前的原设置）。"""
