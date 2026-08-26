@@ -150,12 +150,17 @@ def classify_traffic(t: dict) -> str:
 
 
 def traffic_categories(db: DB, limit: int = 200, source: str | None = None) -> list[dict]:
-    """按类别分组统计流量（同类型归类列表）。"""
+    """按类别分组统计流量（同类型归类列表）。source 支持逗号分隔多来源。"""
     sql = "SELECT id, method, url, status, resp_headers, source, created_at FROM traffic"
     params: list = []
     if source:
-        sql += " WHERE source=?"
-        params.append(source)
+        srcs = [s.strip() for s in source.split(",") if s.strip()]
+        if len(srcs) == 1:
+            sql += " WHERE source=?"
+            params.append(srcs[0])
+        elif srcs:
+            sql += " WHERE source IN (" + ",".join("?" * len(srcs)) + ")"
+            params.extend(srcs)
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)
     rows = db.query(sql, tuple(params))

@@ -423,6 +423,41 @@ def test_proxy_lifecycle(tmp_path):
     p.stop()
 
 
+# ================= 流量查询（多来源） =================
+def test_list_traffic_multi_source(tmp_path):
+    """list_traffic 支持逗号分隔多来源（流量劫取用 proxy,proxy_https）。"""
+    from redhawk.traffic_engine.recorder import list_traffic, save_traffic
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    save_traffic(db, "GET", "http://a/", {}, "", 200, {}, "x", "proxy")
+    save_traffic(db, "GET", "http://b/", {}, "", 200, {}, "x", "proxy_https")
+    save_traffic(db, "GET", "http://c/", {}, "", 200, {}, "x", "repeater")
+
+    all_rows = list_traffic(db, limit=50)
+    assert len(all_rows) == 3
+    auto = list_traffic(db, limit=50, source="proxy,proxy_https")
+    assert {r["url"] for r in auto} == {"http://a/", "http://b/"}
+    single = list_traffic(db, limit=50, source="repeater")
+    assert len(single) == 1 and single[0]["url"] == "http://c/"
+    db.close()
+
+
+def test_traffic_categories_multi_source(tmp_path):
+    """traffic_categories 支持逗号分隔多来源。"""
+    from redhawk.intercept import save_traffic, traffic_categories
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    save_traffic(db, "GET", "http://a/x.html", {}, "", 200, {"Content-Type": "text/html"}, "<html>", "proxy")
+    save_traffic(db, "GET", "http://b/x.html", {}, "", 200, {"Content-Type": "text/html"}, "<html>", "proxy_https")
+    save_traffic(db, "GET", "http://c/x.html", {}, "", 200, {"Content-Type": "text/html"}, "<html>", "repeater")
+    cats = traffic_categories(db, limit=50, source="proxy,proxy_https")
+    total = sum(c["count"] for c in cats)
+    assert total == 2, f"多来源归类应只统计 proxy+proxy_https: {cats}"
+    db.close()
+
+
 # ================= 系统代理接管/还原 =================
 def test_stop_restores_system_proxy(tmp_path, monkeypatch):
     """stop 必须调用 restore_system_proxy（还原接管前的原设置）。"""

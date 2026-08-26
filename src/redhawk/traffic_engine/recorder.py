@@ -46,8 +46,14 @@ def list_traffic(db: DB, limit: int = 50, source: str | None = None) -> list[dic
     sql = "SELECT id, method, url, status, source, created_at FROM traffic"
     params: list = []
     if source:
-        sql += " WHERE source=?"
-        params.append(source)
+        # 支持逗号分隔多来源：source=proxy,proxy_https
+        srcs = [s.strip() for s in source.split(",") if s.strip()]
+        if len(srcs) == 1:
+            sql += " WHERE source=?"
+            params.append(srcs[0])
+        elif srcs:
+            sql += " WHERE source IN (" + ",".join("?" * len(srcs)) + ")"
+            params.extend(srcs)
     sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)
     return db.query(sql, tuple(params))

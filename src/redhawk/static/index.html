@@ -109,6 +109,13 @@
 
   /* ===== 主区 ===== */
   .main { flex: 1; padding: 22px; z-index: 1; max-width: 1200px; }
+  /* 报文详情：固定在窗口底部，不随列表无限延伸 */
+  .traffic-detail-fixed {
+    position: fixed; left: 168px; right: 0; bottom: 0;
+    background: var(--card); border-top: 2px solid var(--accent);
+    box-shadow: 0 -4px 16px rgba(0,0,0,.1);
+    padding: 10px 18px 16px; max-height: 45vh; overflow: auto; z-index: 10;
+  }
   .view-title { font-size: 20px; font-weight: 800; margin-bottom: 4px; letter-spacing: 1px; }
   .view-desc { font-size: 12.5px; color: var(--dim); margin-bottom: 18px; }
   .panel {
@@ -206,6 +213,10 @@
     <button class="nav-item" data-view="traffic" onclick="showView('traffic'); loadTraffic()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h4l3-8 4 16 3-8h6"/></svg>
       流量记录
+    </button>
+    <button class="nav-item" data-view="intercept" onclick="showView('intercept'); loadIntercept()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+      流量劫取
     </button>
     <div class="nav-group">扫描与报告</div>
     <button class="nav-item" data-view="scan" onclick="showView('scan')">
@@ -345,7 +356,7 @@
   <!-- 流量记录 -->
   <div class="view hidden" id="view-traffic">
     <div class="view-title">流量记录</div>
-    <div class="view-desc">抓包与发包产生的所有请求/响应记录。启动代理自动接管系统代理，抓取主机所有应用的 HTTP 流量。</div>
+    <div class="view-desc">手动发包产生的请求/响应记录（Repeater 构造）。代理自动捕获的流量请查看「⚡ 流量劫取」。</div>
     <div class="panel">
       <div class="flex-h">
         <button class="btn small" onclick="loadTraffic()">刷新</button>
@@ -353,8 +364,9 @@
         <button class="btn small ghost" onclick="showTrafficView('cat')" id="tvCatBtn">🗂 归类</button>
         <label style="margin:0 0 0 8px">来源</label>
         <select id="trafficSource" style="width:130px" onchange="loadTraffic()">
-          <option value="">全部</option><option value="proxy">代理抓包</option>
-          <option value="repeater">发包记录</option>
+          <option value="repeater" selected>发包记录</option>
+          <option value="">全部</option>
+          <option value="proxy,proxy_https">代理抓包</option>
         </select>
       </div>
       <div id="trafficList">
@@ -365,12 +377,26 @@
       </div>
       <div id="trafficCat" class="hidden" style="margin-top:10px"></div>
     </div>
-    <div class="panel hidden" id="trafficDetail">
-      <h3>报文详情</h3>
-      <div class="split">
-        <div><h3 style="font-size:12px;color:var(--accent)">请求</h3><div class="mono-pre" id="trafficReq"></div></div>
-        <div><h3 style="font-size:12px;color:#2f9e44">响应</h3><div class="mono-pre" id="trafficResp"></div></div>
+  </div>
+
+  <!-- 流量劫取：代理运行时自动捕获 -->
+  <div class="view hidden" id="view-intercept">
+    <div class="view-title">⚡ 流量劫取</div>
+    <div class="view-desc">代理运行时自动捕获的流量（HTTP + HTTPS 解密）。手动发包请查看「流量记录」。</div>
+    <div class="panel">
+      <div class="flex-h">
+        <button class="btn small" onclick="loadIntercept()">刷新</button>
+        <button class="btn small ghost" onclick="showInterceptView('list')" id="ivListBtn">📋 全部</button>
+        <button class="btn small ghost" onclick="showInterceptView('cat')" id="ivCatBtn">🗂 归类</button>
+        <span style="color:var(--dim);font-size:11.5px;margin-left:8px">来源：代理抓包 + HTTPS 解密</span>
       </div>
+      <div id="interceptList">
+        <table id="tblIntercept" style="margin-top:10px">
+          <thead><tr><th>ID</th><th>方法</th><th>URL</th><th>状态</th><th>来源</th><th>时间</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="interceptCat" class="hidden" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -664,6 +690,18 @@
   </div>
 </div>
 
+<!-- 报文详情：全局固定底部（点击流量行显示，默认隐藏） -->
+<div class="traffic-detail-fixed hidden" id="trafficDetail">
+  <div class="flex-h" style="justify-content:space-between;align-items:center">
+    <h3 style="margin:0;font-size:13px">📄 报文详情</h3>
+    <button class="btn small ghost" onclick="hideTrafficDetail()">✕ 关闭</button>
+  </div>
+  <div class="split" style="margin-top:8px">
+    <div><h3 style="font-size:12px;color:var(--accent)">请求</h3><div class="mono-pre" id="trafficReq"></div></div>
+    <div><h3 style="font-size:12px;color:#2f9e44">响应</h3><div class="mono-pre" id="trafficResp"></div></div>
+  </div>
+</div>
+
 <script>
 // ===== 主题切换（持久化） =====
 function setTheme(name) {
@@ -869,16 +907,16 @@ function showTrafficView(view) {
   document.getElementById('trafficCat').classList.toggle('hidden', !isCat);
   document.getElementById('tvListBtn').classList.toggle('ghost', isCat);
   document.getElementById('tvCatBtn').classList.toggle('ghost', !isCat);
-  if (isCat) loadCategories();
+  const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
+  if (isCat) loadCategories(src, 'trafficCat');
   else loadTraffic();
 }
-async function loadCategories() {
+async function loadCategories(src, boxId) {
   try {
-    const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
     const r = await api('/api/traffic-categories?limit=200&source=' + encodeURIComponent(src));
-    const box = document.getElementById('trafficCat');
+    const box = document.getElementById(boxId);
     if (!r.categories || !r.categories.length) {
-      box.innerHTML = '<div class="empty">暂无流量 — 启动抓包代理后自动捕获主机流量</div>';
+      box.innerHTML = '<div class="empty">暂无流量</div>';
       return;
     }
     box.innerHTML = r.categories.map(g =>
@@ -896,49 +934,52 @@ async function loadCategories() {
       </div>`).join('');
   } catch(e) {}
 }
+// 分组折叠渲染：相同 URL 折叠为一行，点击展开（流量记录 / 流量劫取共用）
+function renderTrafficRows(tb, rows) {
+  const groups = [];
+  const gidx = new Map();
+  for (const t of rows) {
+    const key = t.url;
+    if (!gidx.has(key)) { gidx.set(key, groups.length); groups.push({ url: key, items: [] }); }
+    groups[gidx.get(key)].items.push(t);
+  }
+  tb.innerHTML = groups.map((g, gi) => {
+    const collapsed = g.items.length > 1;
+    const last = g.items[g.items.length - 1];   // 最新一条（倒序加载，第一个是最新）
+    const first = g.items[0];
+    const rowClick = collapsed ? `toggleTrafficGroup(${gi})` : `showTrafficDetail(${first.id})`;
+    const caret = collapsed ? '▸' : '';
+    return `
+      <tr class="traffic-row" onclick="${rowClick}" title="${collapsed ? '点击展开 ' + g.items.length + ' 条记录' : '查看详情'}">
+        <td>#${last.id}${collapsed ? '…' : ''}</td>
+        <td><b style="color:${last.method==='GET'?'#2f9e44':'var(--accent)'}">${last.method}</b></td>
+        <td>
+          <span style="color:var(--dim);font-size:10.5px;margin-right:4px">${caret}</span>
+          ${esc(g.url.slice(0,80))}
+          ${collapsed ? `<span class="badge" style="background:var(--accent-soft);color:var(--accent);margin-left:6px">×${g.items.length}</span>` : ''}
+        </td>
+        <td><span class="sev ${last.status>=500?'critical':(last.status>=400?'high':(last.status>=300?'medium':'low'))}">${last.status}</span></td>
+        <td><span class="badge">${last.source}</span></td>
+        <td style="color:var(--dim)">${last.created_at}</td>
+      </tr>
+      ${collapsed ? `<tr class="hidden" id="tg-${gi}"><td colspan="6" style="padding:0;background:var(--accent-soft)22">
+        ${g.items.map(t =>
+          `<div onclick="event.stopPropagation();showTrafficDetail(${t.id})" style="cursor:pointer;display:flex;gap:8px;padding:6px 12px 6px 34px;font-size:12px;border-bottom:1px solid var(--line);align-items:center">
+            <span style="color:var(--dim);min-width:52px">#${t.id}</span>
+            <b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'};min-width:46px">${t.method}</b>
+            <span class="sev ${t.status>=500?'critical':(t.status>=400?'high':(t.status>=300?'medium':'low'))}" style="min-width:36px">${t.status}</span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${esc(t.url.slice(0,90))}</span>
+            <span style="color:var(--dim);font-size:10.5px">${t.created_at}</span>
+          </div>`).join('')}
+      </td></tr>` : ''}`;
+  }).join('') || '<tr><td colspan="6" class="empty">暂无流量记录</td></tr>';
+}
 async function loadTraffic() {
   try {
     const src = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
     const rows = await api('/api/traffic?limit=60&source=' + encodeURIComponent(src));
     const tb = document.querySelector('#tblTraffic tbody');
-    // 按 URL 分组：相同 URL 折叠为一行，点击展开看明细（更清晰整洁）
-    const groups = [];
-    const gidx = new Map();
-    for (const t of rows) {
-      const key = t.url;
-      if (!gidx.has(key)) { gidx.set(key, groups.length); groups.push({ url: key, items: [] }); }
-      groups[gidx.get(key)].items.push(t);
-    }
-    tb.innerHTML = groups.map((g, gi) => {
-      const collapsed = g.items.length > 1;
-      const last = g.items[g.items.length - 1];   // 最新一条（倒序加载，第一个是最新）
-      const first = g.items[0];
-      const rowClick = collapsed ? `toggleTrafficGroup(${gi})` : `showTrafficDetail(${first.id})`;
-      const caret = collapsed ? (g.items.length > 1 ? '▸' : '') : '';
-      return `
-        <tr class="traffic-row" onclick="${rowClick}" title="${collapsed ? '点击展开 ' + g.items.length + ' 条记录' : '查看详情'}">
-          <td>#${last.id}${collapsed ? '…' : ''}</td>
-          <td><b style="color:${last.method==='GET'?'#2f9e44':'var(--accent)'}">${last.method}</b></td>
-          <td>
-            <span style="color:var(--dim);font-size:10.5px;margin-right:4px">${caret}</span>
-            ${esc(g.url.slice(0,80))}
-            ${collapsed ? `<span class="badge" style="background:var(--accent-soft);color:var(--accent);margin-left:6px">×${g.items.length}</span>` : ''}
-          </td>
-          <td><span class="sev ${last.status>=500?'critical':(last.status>=400?'high':(last.status>=300?'medium':'low'))}">${last.status}</span></td>
-          <td><span class="badge">${last.source}</span></td>
-          <td style="color:var(--dim)">${last.created_at}</td>
-        </tr>
-        ${collapsed ? `<tr class="hidden" id="tg-${gi}"><td colspan="6" style="padding:0;background:var(--accent-soft)22">
-          ${g.items.map(t =>
-            `<div onclick="event.stopPropagation();showTrafficDetail(${t.id})" style="cursor:pointer;display:flex;gap:8px;padding:6px 12px 6px 34px;font-size:12px;border-bottom:1px solid var(--line);align-items:center">
-              <span style="color:var(--dim);min-width:52px">#${t.id}</span>
-              <b style="color:${t.method==='GET'?'#2f9e44':'var(--accent)'};min-width:46px">${t.method}</b>
-              <span class="sev ${t.status>=500?'critical':(t.status>=400?'high':(t.status>=300?'medium':'low'))}" style="min-width:36px">${t.status}</span>
-              <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)">${esc(t.url.slice(0,90))}</span>
-              <span style="color:var(--dim);font-size:10.5px">${t.created_at}</span>
-            </div>`).join('')}
-        </td></tr>` : ''}`;
-    }).join('') || '<tr><td colspan="6" class="empty">无流量记录 — 启动抓包代理或使用发包工具</td></tr>';
+    renderTrafficRows(tb, rows);
     const recent = document.getElementById('proxyRecent');
     if (recent) {
       recent.innerHTML = rows.slice(0,10).map(t =>
@@ -953,6 +994,25 @@ function toggleTrafficGroup(gi) {
   const el = document.getElementById('tg-' + gi);
   if (el) el.classList.toggle('hidden');
 }
+
+// ===== 流量劫取（代理自动捕获） =====
+function showInterceptView(view) {
+  const isCat = view === 'cat';
+  document.getElementById('interceptList').classList.toggle('hidden', isCat);
+  document.getElementById('interceptCat').classList.toggle('hidden', !isCat);
+  document.getElementById('ivListBtn').classList.toggle('ghost', isCat);
+  document.getElementById('ivCatBtn').classList.toggle('ghost', !isCat);
+  if (isCat) loadCategories('proxy,proxy_https', 'interceptCat');
+  else loadIntercept();
+}
+async function loadIntercept() {
+  try {
+    const rows = await api('/api/traffic?limit=60&source=proxy,proxy_https');
+    const tb = document.querySelector('#tblIntercept tbody');
+    renderTrafficRows(tb, rows);
+  } catch(e) {}
+}
+
 async function showTrafficDetail(id) {
   try {
     const t = await api('/api/traffic/' + id);
@@ -962,6 +1022,10 @@ async function showTrafficDetail(id) {
     document.getElementById('trafficReq').textContent = `${t.method} ${t.url}\n${reqH}\n\n${t.req_body||''}`;
     document.getElementById('trafficResp').textContent = `HTTP ${t.status}\n${respH}\n\n${(t.resp_body||'').slice(0,8000)}`;
   } catch(e) {}
+}
+function hideTrafficDetail() {
+  const el = document.getElementById('trafficDetail');
+  if (el) el.classList.add('hidden');
 }
 
 // ===== 扫描 =====
