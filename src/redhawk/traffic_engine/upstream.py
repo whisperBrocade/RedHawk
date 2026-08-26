@@ -1,8 +1,8 @@
-"""RedHawk v2 — 上游转发会话（W1：每请求新建连接；W2 起加连接池）。
+"""RedHawk v2 — 上游转发会话 + 连接池（W2）。
 
 对应 06 号文档 §四.2。职责：
 1. 解析目标 host/port/tls/url（代理请求 / CONNECT-MITM 两种来源）
-2. 建立上游连接（明文或 TLS）
+2. 连接池按 (tls, host, port, 上游代理) 键控复用上游连接
 3. 用 h11 CLIENT 角色转发请求（过滤 hop-by-hop 头，h11 自动补 CL/chunked）
 4. 读取上游响应事件，回传给客户端（h11 SERVER 的 conn/writer 由调用方传入）
 5. 组装请求/响应对入库（recorder.save_traffic）
@@ -13,6 +13,8 @@ from __future__ import annotations
 import asyncio
 import json
 import ssl
+import time
+from collections import deque
 from urllib.parse import urlparse
 
 import h11
@@ -101,48 +103,144 @@ async def _read_head(reader: asyncio.StreamReader) -> bytes:
     return buf
 
 
-class UpstreamSession:
-    """单次请求的上游会话：请求转发 + 响应回传 + 入库。"""
+# ================= 上游连接池（W2） =================
+class PooledConn:
+    """池中的一条上游连接（reader/writer + h11 CLIENT 状态机）。"""
 
-    def __init__(self, db, source: str = "proxy", https_host: str | None = None,
-                 https_port: int | None = None):
+    __slots__ = ("key", "reader", "writer", "h11", "via_proxy", "last_used")
+
+    def __init__(self, key, reader, writer, h11_conn, via_proxy, last_used):
+        self.key = key
+        self.reader = reader
+        self.writer = writer
+        self.h11 = h11_conn
+        self.via_proxy = via_proxy
+        self.last_used = last_used
+
+    async def close(self) -> None:
+        try:
+            self.writer.close()
+            try:
+                await self.writer.wait_closed()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+
+class UpstreamPool:
+    """HTTP/1.1 上游连接池：按 (tls, host, port, proxy) 键控复用。
+
+    同一时刻一个 h1 连接只服务一个请求（acquire 独占，release 归还）。
+    惰性清理：acquire 时剔除 stale（空闲超时/对端已关）连接。
+    单事件循环内使用（asyncio 单线程），无需加锁。
+    """
+
+    def __init__(self, max_idle: int = 16, idle_timeout: float | None = None):
+        self._idle: dict[tuple, deque[PooledConn]] = {}
+        self._max_idle = max_idle
+        self._idle_timeout = idle_timeout if idle_timeout is not None else engine_config.IDLE_TIMEOUT
+        self.created = 0   # 新建连接计数（测试/观测用）
+
+    # ---------- 获取 / 归还 ----------
+    async def acquire(self, host: str, port: int, tls: bool) -> PooledConn:
+        """取一条可用连接：优先复用空闲，否则新建。"""
+        key = self._key(host, port, tls)
+        q = self._idle.get(key)
+        if q:
+            while q:
+                c = q.popleft()
+                if self._stale(c):
+                    await c.close()
+                    continue
+                try:
+                    c.h11.start_next_cycle()
+                except h11.LocalProtocolError:
+                    await c.close()
+                    continue
+                c.last_used = time.monotonic()
+                return c
+        reader, writer, via_proxy = await open_upstream(host, port, tls)
+        h = h11.Connection(h11.CLIENT)
+        self.created += 1
+        return PooledConn(key, reader, writer, h, via_proxy, time.monotonic())
+
+    def try_release(self, c: PooledConn) -> bool:
+        """尝试归还连接。返回 True=已归还（可继续复用），False=调用方应关闭。"""
+        h = c.h11
+        reusable = (
+            h.our_state is h11.DONE
+            and h.their_state is h11.DONE
+            and h.our_state is not h11.MUST_CLOSE
+            and h.their_state is not h11.MUST_CLOSE
+            and not c.writer.is_closing()
+        )
+        q = self._idle.setdefault(c.key, deque())
+        if reusable and len(q) < self._max_idle:
+            c.last_used = time.monotonic()
+            q.append(c)
+            return True
+        return False
+
+    # ---------- 清理 ----------
+    def _stale(self, c: PooledConn) -> bool:
+        if c.writer.is_closing():
+            return True
+        if self._idle_timeout and time.monotonic() - c.last_used > self._idle_timeout:
+            return True
+        return False
+
+    def _key(self, host: str, port: int, tls: bool) -> tuple:
+        return (tls, host, port, engine_config.upstream_proxy().strip())
+
+    async def close_all(self) -> None:
+        for q in self._idle.values():
+            while q:
+                c = q.popleft()
+                await c.close()
+        self._idle.clear()
+
+
+class UpstreamSession:
+    """单次请求的上游会话：请求转发 + 响应回传 + 入库。连接来自池，用后归还。"""
+
+    def __init__(self, db, pool: UpstreamPool, source: str = "proxy",
+                 https_host: str | None = None, https_port: int | None = None):
         self.db = db
+        self.pool = pool
         self.source = source
         self.https_host = https_host      # MITM 场景：上游目标 host
         self.https_port = https_port or 443
-        self.conn: h11.Connection | None = None
-        self.reader: asyncio.StreamReader | None = None
-        self.writer: asyncio.StreamWriter | None = None
-        self.via_proxy: bool = False
+        self._conn: PooledConn | None = None
         self.meta: dict = {}
 
     # ---------- 请求侧 ----------
     async def start(self, request: h11.Request) -> dict | None:
-        """解析目标并建立上游连接，发送请求头。返回请求元信息；失败返回 None。"""
+        """解析目标并从池取连接，发送请求头。返回请求元信息；失败返回 None。"""
         host, port, tls, target_path, url = self._resolve_target(request)
         if host is None:
             return None
         try:
-            self.reader, self.writer, self.via_proxy = await open_upstream(host, port, tls)
+            self._conn = await self.pool.acquire(host, port, tls)
         except Exception as e:
             log.debug("upstream connect failed %s:%s: %s", host, port, e)
             return None
 
-        self.conn = h11.Connection(h11.CLIENT)
+        conn = self._conn.h11
         headers = [(k, v) for k, v in request.headers if k.lower() not in HOP_BY_HOP]
         # 明文 HTTP 走上游代理时，请求行必须用绝对 URL（RFC 7230 absolute-form）
         target_for_send = target_path
-        if self.via_proxy and not tls:
+        if self._conn.via_proxy and not tls:
             target_for_send = f"http://{host}:{port}{target_path}"
             headers.append((b"proxy-connection", b"keep-alive"))
         try:
-            out = self.conn.send(h11.Request(
+            out = conn.send(h11.Request(
                 method=request.method, target=target_for_send, headers=headers))
             if out:
-                self.writer.write(out)
-            await self.writer.drain()
+                self._conn.writer.write(out)
+            await self._conn.writer.drain()
         except Exception:
-            await self.close()
+            await self._discard()
             return None
 
         self.meta = {
@@ -183,34 +281,35 @@ class UpstreamSession:
         self.meta["req_body"] = (
             self.meta["req_body"] + data.decode("utf-8", errors="replace")
         )[:MAX_BODY]
-        if self.conn and self.writer:
-            out = self.conn.send(h11.Data(data=data))
+        if self._conn:
+            out = self._conn.h11.send(h11.Data(data=data))
             if out:
-                self.writer.write(out)
-            await self.writer.drain()
+                self._conn.writer.write(out)
+            await self._conn.writer.drain()
 
     async def end_request(self) -> None:
-        if self.conn and self.writer:
-            out = self.conn.send(h11.EndOfMessage())
+        if self._conn:
+            out = self._conn.h11.send(h11.EndOfMessage())
             if out:
-                self.writer.write(out)
-            await self.writer.drain()
+                self._conn.writer.write(out)
+            await self._conn.writer.drain()
 
     # ---------- 响应侧 ----------
     async def relay_response(self, client_conn: h11.Connection, client_writer: asyncio.StreamWriter) -> None:
-        """读取上游响应，转发回客户端（h11 SERVER），完成后入库。"""
+        """读取上游响应，转发回客户端（h11 SERVER），完成后入库并归还连接。"""
         status = 0
         resp_headers: dict = {}
         resp_body = ""
         try:
             while True:
-                data = await asyncio.wait_for(self.reader.read(65536), timeout=engine_config.RESP_TIMEOUT)
+                data = await asyncio.wait_for(
+                    self._conn.reader.read(65536), timeout=engine_config.RESP_TIMEOUT)
                 if not data:
                     break
-                self.conn.receive_data(data)
+                self._conn.h11.receive_data(data)
                 while True:
                     try:
-                        event = self.conn.next_event()
+                        event = self._conn.h11.next_event()
                     except h11.RemoteProtocolError:
                         await self._send_502(client_conn, client_writer)
                         return
@@ -244,6 +343,19 @@ class UpstreamSession:
                         return
         except (asyncio.TimeoutError, ConnectionError, OSError):
             await self._send_502(client_conn, client_writer)
+        finally:
+            # 响应结束（或异常）：归还连接复用，无法复用则关闭
+            c = self._conn
+            self._conn = None
+            if c is not None and not self.pool.try_release(c):
+                await c.close()
+
+    async def _discard(self) -> None:
+        """请求侧失败：关闭连接，不归还池。"""
+        c = self._conn
+        self._conn = None
+        if c is not None:
+            await c.close()
 
     async def _send_502(self, client_conn: h11.Connection, client_writer: asyncio.StreamWriter) -> None:
         try:
@@ -269,14 +381,3 @@ class UpstreamSession:
             )
         except Exception:
             pass  # 记录失败不阻断转发（v1 同策略）
-
-    async def close(self) -> None:
-        try:
-            if self.writer:
-                self.writer.close()
-                try:
-                    await self.writer.wait_closed()
-                except Exception:
-                    pass
-        except Exception:
-            pass

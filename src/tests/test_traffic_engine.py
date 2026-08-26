@@ -66,6 +66,65 @@ def http_server():
     srv.server_close()
 
 
+class _ChunkedHandler(BaseHTTPRequestHandler):
+    """分块传输响应（Transfer-Encoding: chunked）。"""
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.send_header("Transfer-Encoding", "chunked")
+        self.end_headers()
+        for i in range(5):
+            chunk = f"chunk{i}-{'x' * 50}\n".encode()
+            self.wfile.write(f"{len(chunk):x}\r\n".encode() + chunk + b"\r\n")
+            self.wfile.flush()
+        self.wfile.write(b"0\r\n\r\n")
+
+
+@pytest.fixture()
+def chunk_server():
+    srv = HTTPServer(("127.0.0.1", 0), _ChunkedHandler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    yield srv.server_address[1]
+    srv.shutdown()
+    srv.server_close()
+
+
+class _ExpectHandler(BaseHTTPRequestHandler):
+    """处理 Expect: 100-continue 的 POST 服务器。"""
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def do_POST(self):
+        if (self.headers.get("Expect") or "").lower() == "100-continue":
+            self.send_response(100)
+            self.end_headers()
+        n = int(self.headers.get("Content-Length", 0) or 0)
+        body = self.rfile.read(n)
+        resp = b"got:" + body
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(resp)))
+        self.end_headers()
+        self.wfile.write(resp)
+
+
+@pytest.fixture()
+def expect_server():
+    srv = HTTPServer(("127.0.0.1", 0), _ExpectHandler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    yield srv.server_address[1]
+    srv.shutdown()
+    srv.server_close()
+
+
 def _start_proxy(db: DB, port: int | None = None) -> ProxyServer:
     p = ProxyServer(db, port=port or free_port(), take_system_proxy=False)
     assert p.start()["status"] == "running", "代理启动失败"
@@ -139,6 +198,93 @@ def test_keepalive_multiple_requests(tmp_path, http_server):
     rows = db.query("SELECT * FROM traffic WHERE source='proxy'")
     assert len(rows) == 3
     assert {r["url"].rsplit("/", 1)[-1] for r in rows} == {"k0", "k1", "k2"}
+    db.close()
+
+
+# ================= W2：HTTP/1.1 完整语义 =================
+def test_keepalive_100_requests_pool_reuse(tmp_path, http_server):
+    """同一客户端连接 100 连发；上游连接应被连接池复用（created 远小于 100）。"""
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = _start_proxy(db)
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", p.port, timeout=10)
+        for i in range(100):
+            conn.request("GET", f"http://127.0.0.1:{http_server}/k{i}")
+            r = conn.getresponse()
+            assert r.status == 200
+            r.read()
+        conn.close()
+        created = p._listener.pool.created  # stop 前取（stop 会清 listener）
+    finally:
+        p.stop()
+    rows = db.query("SELECT * FROM traffic WHERE source='proxy'")
+    assert len(rows) == 100
+    assert created <= 5, f"100 请求应复用上游连接（实际新建 {created}）"
+    db.close()
+
+
+def test_chunked_response_recorded_complete(tmp_path, chunk_server):
+    """chunked 响应应完整转发并记录（v1 此场景 body 记录缺失）。"""
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = _start_proxy(db)
+    try:
+        status, body = _proxy_request(p.port, "GET", f"http://127.0.0.1:{chunk_server}/chunk")
+        assert status == 200
+        assert b"chunk4" in body
+    finally:
+        p.stop()
+    row = db.query_one("SELECT * FROM traffic WHERE source='proxy'")
+    assert row is not None
+    assert "chunk0" in row["resp_body"] and "chunk4" in row["resp_body"], \
+        "chunked 响应体应完整记录"
+    db.close()
+
+
+def test_expect_100_continue(tmp_path, expect_server):
+    """Expect: 100-continue 应透传，请求体正常转发并记录。"""
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = _start_proxy(db)
+    try:
+        status, body = _proxy_request(
+            p.port, "POST", f"http://127.0.0.1:{expect_server}/up",
+            body=b"hello-continue",
+            headers={"Expect": "100-continue", "Content-Type": "text/plain"},
+        )
+        assert status == 200
+        assert b"got:hello-continue" in body
+    finally:
+        p.stop()
+    row = db.query_one("SELECT * FROM traffic WHERE method='POST'")
+    assert row is not None
+    assert "hello-continue" in row["req_body"]
+    db.close()
+
+
+def test_connection_close_terminates(tmp_path, http_server):
+    """请求带 Connection: close → 响应后连接关闭；后续请求 http.client 自动重连。"""
+    db = DB(tmp_path / "t.db")
+    db.init()
+    p = _start_proxy(db)
+    try:
+        conn = http.client.HTTPConnection("127.0.0.1", p.port, timeout=10)
+        conn.request("GET", f"http://127.0.0.1:{http_server}/close1",
+                     headers={"Connection": "close"})
+        r1 = conn.getresponse()
+        assert r1.status == 200
+        r1.read()
+        # 连接已被代理关闭 → http.client 自动重连
+        conn.request("GET", f"http://127.0.0.1:{http_server}/after")
+        r2 = conn.getresponse()
+        assert r2.status == 200
+        r2.read()
+        conn.close()
+    finally:
+        p.stop()
+    rows = db.query("SELECT * FROM traffic WHERE source='proxy'")
+    assert len(rows) == 2, "两个请求都应有记录"
     db.close()
 
 

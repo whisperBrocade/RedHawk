@@ -6,8 +6,8 @@
 - 支持 keep-alive 多请求循环
 - 代理自环检测（Host=127.0.0.1:port → 200 空）
 
-W1 范围：每请求新建上游连接（连接池 W2）；明文 HTTP + CONNECT-MITM
-（h1 over TLS）均可处理；HTTP/2 为 W3。
+W2 范围：上游连接池（键控复用/空闲超时/失效重建）；明文 HTTP +
+CONNECT-MITM（h1 over TLS）均可处理；HTTP/2 为 W3。
 """
 
 from __future__ import annotations
@@ -17,19 +17,21 @@ import logging
 
 import h11
 
-from redhawk.traffic_engine.upstream import UpstreamSession
+from redhawk.traffic_engine.upstream import UpstreamPool, UpstreamSession
 
 log = logging.getLogger("redhawk.traffic_engine.h1")
 
 
 class H1ClientConnection:
     def __init__(self, db, source: str = "proxy", port: int = 8888,
-                 https_host: str | None = None, https_port: int | None = None):
+                 https_host: str | None = None, https_port: int | None = None,
+                 pool: UpstreamPool | None = None):
         self.db = db
         self.source = source
         self.port = port                      # 本机代理端口（自环检测用）
         self.https_host = https_host          # MITM 场景：上游目标 host
         self.https_port = https_port or 443
+        self.pool = pool or UpstreamPool()
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
                      first_data: bytes = b"") -> None:
@@ -66,7 +68,8 @@ class H1ClientConnection:
                     if isinstance(event, h11.Request):
                         if self._self_loop(event, conn, writer):
                             return
-                        up = UpstreamSession(self.db, self.source, self.https_host, self.https_port)
+                        up = UpstreamSession(self.db, self.pool, self.source,
+                                             self.https_host, self.https_port)
                         meta = await up.start(event)
                         if meta is None:
                             await self._send_502(conn, writer)
@@ -78,7 +81,7 @@ class H1ClientConnection:
                         if up is not None:
                             await up.end_request()
                             await up.relay_response(conn, writer)
-                            await up.close()
+                            # relay_response 内部已归还/关闭上游连接
                             up = None
                             # 一个请求-响应循环完成：准备下一个（keep-alive）
                             if conn.our_state is h11.DONE:

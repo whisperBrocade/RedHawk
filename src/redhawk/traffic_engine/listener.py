@@ -18,6 +18,7 @@ import ssl
 
 from redhawk.traffic_engine.client_h1 import H1ClientConnection
 from redhawk.traffic_engine.config import PROBE_KEYWORDS
+from redhawk.traffic_engine.upstream import UpstreamPool
 
 log = logging.getLogger("redhawk.traffic_engine.listener")
 
@@ -33,6 +34,7 @@ class ProxyListener:
         self._server: asyncio.AbstractServer | None = None
         self._sys_proxy_taken = False
         self._sys_proxy_prev: dict | None = None   # 接管前的系统代理原设置
+        self.pool = UpstreamPool()                 # W2：上游连接池（listener 级共享）
 
     async def serve(self) -> None:
         self._server = await asyncio.start_server(
@@ -81,6 +83,11 @@ class ProxyListener:
                         _write_sys_proxy(False, "")
             except Exception:
                 pass
+        # 关闭空闲上游连接池
+        try:
+            await self.pool.close_all()
+        except Exception:
+            pass
 
     # ---------- 客户端连接 ----------
     async def _on_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -96,7 +103,7 @@ class ProxyListener:
             if data.startswith(b"CONNECT "):
                 await self._handle_connect(reader, writer, data)
             else:
-                h = H1ClientConnection(self.db, self.source, port=self.port)
+                h = H1ClientConnection(self.db, self.source, port=self.port, pool=self.pool)
                 await h.handle(reader, writer, first_data=data)
         except Exception:
             log.debug("client handler error", exc_info=True)
@@ -153,5 +160,5 @@ class ProxyListener:
 
         # 3) TLS 内的 HTTP/1.1（MITM）：上游由 UpstreamSession 走 TLS
         h = H1ClientConnection(self.db, "proxy_https", port=self.port,
-                               https_host=host, https_port=port)
+                               https_host=host, https_port=port, pool=self.pool)
         await h.handle(reader, writer)
