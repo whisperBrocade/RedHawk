@@ -147,9 +147,24 @@ CREATE TABLE IF NOT EXISTS traffic (
   resp_headers  TEXT,
   resp_body     TEXT,
   source        TEXT DEFAULT 'proxy',
-  created_at    TEXT DEFAULT (datetime('now','localtime'))
+  created_at    TEXT DEFAULT (datetime('now','localtime')),
+  req_blob_id   INTEGER,                -- v2：大 body 的 blob 引用
+  resp_blob_id  INTEGER,
+  req_blob_size INTEGER DEFAULT 0,
+  resp_blob_size INTEGER DEFAULT 0,
+  proto         TEXT DEFAULT 'http1',   -- http1 | http2 | ws_handshake | sse
+  http_version  TEXT                    -- 'HTTP/1.1' | 'HTTP/2'
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic(created_at);
+
+CREATE TABLE IF NOT EXISTS traffic_blobs (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  sha256        TEXT UNIQUE NOT NULL,
+  path          TEXT NOT NULL,
+  size          INTEGER NOT NULL,
+  created_at    TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_blobs_sha ON traffic_blobs(sha256);
 
 CREATE TABLE IF NOT EXISTS reports (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -203,7 +218,22 @@ class DB:
 
     def init(self) -> None:
         self.conn.executescript(SCHEMA)
+        self._ensure_columns()
         self.conn.commit()
+
+    def _ensure_columns(self) -> None:
+        """老库平滑升级：traffic 表补 v2 增量列（新库建表已含）。"""
+        cols = {r[1] for r in self.conn.execute("PRAGMA table_info(traffic)")}
+        for name, ddl in (
+            ("req_blob_id", "INTEGER"),
+            ("resp_blob_id", "INTEGER"),
+            ("req_blob_size", "INTEGER DEFAULT 0"),
+            ("resp_blob_size", "INTEGER DEFAULT 0"),
+            ("proto", "TEXT DEFAULT 'http1'"),
+            ("http_version", "TEXT"),
+        ):
+            if name not in cols:
+                self.conn.execute(f"ALTER TABLE traffic ADD COLUMN {name} {ddl}")
 
     @contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:

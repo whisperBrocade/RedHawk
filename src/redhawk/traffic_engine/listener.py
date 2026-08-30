@@ -17,6 +17,7 @@ import logging
 import ssl
 
 from redhawk.traffic_engine.client_h1 import H1ClientConnection
+from redhawk.traffic_engine.client_h2 import H2ClientConnection
 from redhawk.traffic_engine.config import PROBE_KEYWORDS
 from redhawk.traffic_engine.upstream import UpstreamPool
 
@@ -146,19 +147,31 @@ class ProxyListener:
         except Exception:
             return
 
-        # 2) 客户端 TLS（动态签发该域名证书，ALPN 仅 http/1.1，h2 为 W3）
+        # 2) 客户端 TLS（动态签发该域名证书，ALPN 协商 h2/http1.1）
         try:
             from redhawk.certgen import get_site_cert
             crt, key = get_site_cert(host)
             ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
             ctx.load_cert_chain(str(crt), str(key))
-            ctx.set_alpn_protocols(["http/1.1"])
+            ctx.set_alpn_protocols(["h2", "http/1.1"])
             await writer.start_tls(ctx, ssl_handshake_timeout=30)
         except Exception:
             log.debug("TLS upgrade failed", exc_info=True)
             return
 
-        # 3) TLS 内的 HTTP/1.1（MITM）：上游由 UpstreamSession 走 TLS
-        h = H1ClientConnection(self.db, "proxy_https", port=self.port,
-                               https_host=host, https_port=port, pool=self.pool)
-        await h.handle(reader, writer)
+        # 3) 按 ALPN 分发：h2（HTTP/2 MITM）或 h1（HTTP/1.1 MITM）
+        alpn = None
+        try:
+            alpn = writer.get_extra_info("ssl_object").selected_alpn_protocol()
+        except Exception:
+            pass
+        if alpn == "h2":
+            log.debug("alpn=h2 -> H2ClientConnection (%s:%s)", host, port)
+            h = H2ClientConnection(self.db, "proxy_https", port=self.port,
+                                   https_host=host, https_port=port)
+            await h.handle(reader, writer)
+        else:
+            log.debug("alpn=%s -> H1ClientConnection (%s:%s)", alpn, host, port)
+            h = H1ClientConnection(self.db, "proxy_https", port=self.port,
+                                   https_host=host, https_port=port, pool=self.pool)
+            await h.handle(reader, writer)

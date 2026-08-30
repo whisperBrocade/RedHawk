@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 
 from redhawk.db import DB
+from redhawk.traffic_engine.stream_store import BlobWriter, blob_dir
 
 # 单条报文记录上限（v1 语义）。W3 起超过部分转 content-addressed blob。
 MAX_BODY = 2 * 1024 * 1024
@@ -30,6 +31,40 @@ BROWSER_UA_PATTERNS = [
 ]
 
 
+def collect_body(body: str, blob: BlobWriter | None, data: bytes,
+                 max_body: int = MAX_BODY) -> tuple[str, BlobWriter | None]:
+    """流式 body 收集：返回 (摘要, blob 或 None)。
+
+    前 max_body 字符进摘要（traffic 表快查）；超限部分（含恰好填满边界）
+    全文进 content-addressed blob——任何大小都不丢。
+    """
+    if blob is not None:
+        blob.write(data)
+        return body, blob
+    chunk = data.decode("utf-8", errors="replace")
+    if len(body) + len(chunk) <= max_body:
+        return body + chunk, None
+    room = max_body - len(body)
+    body = body + chunk[:room]
+    b = BlobWriter()
+    b.write(body.encode("utf-8", errors="replace"))
+    rest = data[len(chunk[:room].encode("utf-8", errors="replace")):]
+    if rest:
+        b.write(rest)
+    return body, b
+
+
+def register_blob(db: DB, sha256: str, size: int) -> int:
+    """登记 blob 到 traffic_blobs 表（sha256 唯一，幂等）。返回 blob id。"""
+    with db.tx():
+        db.conn.execute(
+            "INSERT OR IGNORE INTO traffic_blobs (sha256, path, size) VALUES (?,?,?)",
+            (sha256, str(blob_dir() / sha256), size),
+        )
+    row = db.query_one("SELECT id FROM traffic_blobs WHERE sha256=?", (sha256,))
+    return row["id"] if row else 0
+
+
 def save_traffic(
     db: DB,
     method: str,
@@ -40,9 +75,18 @@ def save_traffic(
     resp_headers: dict,
     resp_body: str,
     source: str = "proxy",
+    req_blob_sha: str | None = None,
+    resp_blob_sha: str | None = None,
+    req_blob_size: int = 0,
+    resp_blob_size: int = 0,
+    proto: str = "http1",
+    http_version: str | None = None,
 ) -> int:
-    """记录一条请求/响应到 traffic 表，返回 id。签名与 v1 完全一致。"""
-    return db.insert("traffic", {
+    """记录一条请求/响应到 traffic 表，返回 id。
+
+    签名向后兼容 v1；大 body 场景传 blob sha/size（全文进 blob，表内存摘要）。
+    """
+    data = {
         "method": method,
         "url": url[:2000],
         "req_headers": json.dumps(req_headers, ensure_ascii=False)[:8000],
@@ -51,7 +95,16 @@ def save_traffic(
         "resp_headers": json.dumps(resp_headers, ensure_ascii=False)[:8000],
         "resp_body": resp_body[:MAX_BODY],
         "source": source,
-    })
+        "proto": proto,
+        "http_version": http_version,
+        "req_blob_size": req_blob_size,
+        "resp_blob_size": resp_blob_size,
+    }
+    if req_blob_sha:
+        data["req_blob_id"] = register_blob(db, req_blob_sha, req_blob_size)
+    if resp_blob_sha:
+        data["resp_blob_id"] = register_blob(db, resp_blob_sha, resp_blob_size)
+    return db.insert("traffic", data)
 
 
 def _client_conditions(client: str | None, params: list) -> str:

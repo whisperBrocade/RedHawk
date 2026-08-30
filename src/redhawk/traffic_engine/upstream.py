@@ -20,7 +20,8 @@ from urllib.parse import urlparse
 import h11
 
 from redhawk.traffic_engine import config as engine_config
-from redhawk.traffic_engine.recorder import MAX_BODY, save_traffic
+from redhawk.traffic_engine.recorder import MAX_BODY, collect_body, save_traffic
+from redhawk.traffic_engine.stream_store import BlobWriter
 
 log = __import__("logging").getLogger("redhawk.traffic_engine.upstream")
 
@@ -212,6 +213,7 @@ class UpstreamSession:
         self.https_host = https_host      # MITM 场景：上游目标 host
         self.https_port = https_port or 443
         self._conn: PooledConn | None = None
+        self._req_blob: BlobWriter | None = None   # W3：大请求体流式落盘
         self.meta: dict = {}
 
     # ---------- 请求侧 ----------
@@ -278,9 +280,9 @@ class UpstreamSession:
         return h, port, False, target, f"http://{host_hdr}{target}"
 
     async def send_data(self, data: bytes) -> None:
-        self.meta["req_body"] = (
-            self.meta["req_body"] + data.decode("utf-8", errors="replace")
-        )[:MAX_BODY]
+        # 请求体：前 MAX_BODY 作摘要，超限后全文进 blob（上传大 body 不丢）
+        self.meta["req_body"], self._req_blob = collect_body(
+            self.meta["req_body"], self._req_blob, data)
         if self._conn:
             out = self._conn.h11.send(h11.Data(data=data))
             if out:
@@ -288,6 +290,10 @@ class UpstreamSession:
             await self._conn.writer.drain()
 
     async def end_request(self) -> None:
+        if self._req_blob is not None:
+            self.meta["req_blob_sha"] = self._req_blob.finalize()
+            self.meta["req_blob_size"] = self._req_blob.size
+            self._req_blob = None
         if self._conn:
             out = self._conn.h11.send(h11.EndOfMessage())
             if out:
@@ -296,10 +302,15 @@ class UpstreamSession:
 
     # ---------- 响应侧 ----------
     async def relay_response(self, client_conn: h11.Connection, client_writer: asyncio.StreamWriter) -> None:
-        """读取上游响应，转发回客户端（h11 SERVER），完成后入库并归还连接。"""
+        """读取上游响应，转发回客户端（h11 SERVER），完成后入库并归还连接。
+
+        body 记录策略：前 MAX_BODY 进 traffic 表（快查摘要），
+        超限部分全文进 content-addressed blob（边收边写，不截断）。
+        """
         status = 0
         resp_headers: dict = {}
         resp_body = ""
+        resp_blob: BlobWriter | None = None
         try:
             while True:
                 data = await asyncio.wait_for(
@@ -332,16 +343,24 @@ class UpstreamSession:
                         out = client_conn.send(h11.Data(data=event.data))
                         if out:
                             client_writer.write(out)
-                        if len(resp_body) < MAX_BODY:
-                            resp_body += event.data.decode("utf-8", errors="replace")
+                        resp_body, resp_blob = collect_body(resp_body, resp_blob, event.data)
                     elif isinstance(event, h11.EndOfMessage):
                         out = client_conn.send(h11.EndOfMessage())
                         if out:
                             client_writer.write(out)
                         await client_writer.drain()
-                        self._record(status, resp_headers, resp_body)
+                        resp_sha = resp_size = None
+                        if resp_blob is not None:
+                            resp_sha = resp_blob.finalize()
+                            resp_size = resp_blob.size
+                            resp_blob = None
+                        self._record(status, resp_headers, resp_body,
+                                     resp_blob_sha=resp_sha, resp_blob_size=resp_size)
                         return
         except (asyncio.TimeoutError, ConnectionError, OSError):
+            if resp_blob is not None:
+                resp_blob.abort()
+                resp_blob = None
             await self._send_502(client_conn, client_writer)
         finally:
             # 响应结束（或异常）：归还连接复用，无法复用则关闭
@@ -372,12 +391,19 @@ class UpstreamSession:
         except Exception:
             pass
 
-    def _record(self, status: int, resp_headers: dict, resp_body: str) -> None:
+    def _record(self, status: int, resp_headers: dict, resp_body: str,
+                resp_blob_sha: str | None = None, resp_blob_size: int = 0) -> None:
         try:
             save_traffic(
                 self.db, self.meta["method"], self.meta["url"],
                 self.meta["req_headers"], self.meta["req_body"],
                 status, resp_headers, resp_body, self.source,
+                req_blob_sha=self.meta.get("req_blob_sha"),
+                resp_blob_sha=resp_blob_sha,
+                req_blob_size=self.meta.get("req_blob_size", 0),
+                resp_blob_size=resp_blob_size,
+                proto=self.meta.get("proto", "http1"),
+                http_version=self.meta.get("http_version"),
             )
         except Exception:
             pass  # 记录失败不阻断转发（v1 同策略）
