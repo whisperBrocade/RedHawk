@@ -381,11 +381,14 @@
         <button class="btn small ghost" onclick="showTrafficView('list')" id="tvListBtn">📋 全部</button>
         <button class="btn small ghost" onclick="showTrafficView('cat')" id="tvCatBtn">🗂 归类</button>
         <label style="margin:0 0 0 8px">范围</label>
-        <select id="trafficSource" style="width:160px" onchange="loadTraffic()">
+        <select id="trafficSource" style="width:150px" onchange="loadTraffic()">
           <option value="" selected>浏览器 + 发包</option>
           <option value="browser">仅浏览器访问</option>
           <option value="repeater">仅发包记录</option>
         </select>
+        <input id="trafficSearch" placeholder="🔍 搜索 URL / 方法..." style="width:180px;margin-left:8px"
+               onkeydown="if(event.key==='Enter')loadTraffic()" />
+        <button class="btn small ghost" onclick="loadTraffic()">搜索</button>
       </div>
       <div id="trafficList">
         <table id="tblTraffic" style="margin-top:10px">
@@ -407,6 +410,9 @@
         <button class="btn small ghost" onclick="showInterceptView('list')" id="ivListBtn">📋 全部</button>
         <button class="btn small ghost" onclick="showInterceptView('cat')" id="ivCatBtn">🗂 归类</button>
         <span style="color:var(--dim);font-size:11.5px;margin-left:8px">自动识别：非浏览器客户端流量</span>
+        <input id="interceptSearch" placeholder="🔍 搜索 URL / 方法..." style="width:180px;margin-left:8px"
+               onkeydown="if(event.key==='Enter')loadIntercept()" />
+        <button class="btn small ghost" onclick="loadIntercept()">搜索</button>
       </div>
       <div id="interceptList">
         <table id="tblIntercept" style="margin-top:10px">
@@ -1010,16 +1016,18 @@ function renderTrafficRows(tb, rows) {
 async function loadTraffic() {
   try {
     const sel = document.getElementById('trafficSource') ? document.getElementById('trafficSource').value : '';
+    const q = document.getElementById('trafficSearch') ? document.getElementById('trafficSearch').value.trim() : '';
+    const qp = q ? '&q=' + encodeURIComponent(q) : '';
     let rows = [];
     if (sel === 'repeater') {
-      rows = await api('/api/traffic?limit=60&source=repeater');
+      rows = await api('/api/traffic?limit=60&source=repeater' + qp);
     } else if (sel === 'browser') {
-      rows = await api('/api/traffic?limit=60&source=proxy,proxy_https&client=browser');
+      rows = await api('/api/traffic?limit=60&source=proxy,proxy_https&client=browser' + qp);
     } else {
-      // 浏览器访问 + 手动发包
+      // 浏览器访问 + 手动发包（搜索时同样过滤两路）
       const [a, b] = await Promise.all([
-        api('/api/traffic?limit=60&source=proxy,proxy_https&client=browser'),
-        api('/api/traffic?limit=60&source=repeater'),
+        api('/api/traffic?limit=60&source=proxy,proxy_https&client=browser' + qp),
+        api('/api/traffic?limit=60&source=repeater' + qp),
       ]);
       rows = a.concat(b).sort((x, y) => y.id - x.id).slice(0, 60);
     }
@@ -1052,7 +1060,9 @@ function showInterceptView(view) {
 }
 async function loadIntercept() {
   try {
-    const rows = await api('/api/traffic?limit=60&source=proxy,proxy_https&client=other');
+    const q = document.getElementById('interceptSearch') ? document.getElementById('interceptSearch').value.trim() : '';
+    const qp = q ? '&q=' + encodeURIComponent(q) : '';
+    const rows = await api('/api/traffic?limit=60&source=proxy,proxy_https&client=other' + qp);
     const tb = document.querySelector('#tblIntercept tbody');
     renderTrafficRows(tb, rows);
   } catch(e) {}

@@ -124,8 +124,8 @@ def _client_conditions(client: str | None, params: list) -> str:
 
 
 def list_traffic(db: DB, limit: int = 50, source: str | None = None,
-                 client: str | None = None) -> list[dict]:
-    """查询流量。source 支持逗号分隔多来源；client 支持 browser/other（按 UA 区分）。"""
+                 client: str | None = None, q: str | None = None) -> list[dict]:
+    """查询流量。source 逗号分隔多来源；client browser/other（按 UA）；q 按 URL 关键词搜索。"""
     conds: list = []
     params: list = []
     if source:
@@ -139,6 +139,10 @@ def list_traffic(db: DB, limit: int = 50, source: str | None = None,
     c = _client_conditions(client, params)
     if c:
         conds.append(c)
+    if q and q.strip():
+        kw = q.strip()
+        conds.append("(url LIKE ? OR method LIKE ?)")
+        params.extend([f"%{kw}%", f"%{kw}%"])
     sql = "SELECT id, method, url, status, source, created_at FROM traffic"
     if conds:
         sql += " WHERE " + " AND ".join(conds)

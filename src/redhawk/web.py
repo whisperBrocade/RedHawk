@@ -323,10 +323,11 @@ def proxy_status():
 
 # ---------------- 流量 ----------------
 @app.get("/api/traffic")
-def traffic_list(limit: int = 50, source: str | None = None, client: str | None = None):
-    """流量查询。source 逗号分隔多来源；client=browser（用户主动浏览）/ other（后台自动）。"""
+def traffic_list(limit: int = 50, source: str | None = None, client: str | None = None,
+                 q: str | None = None):
+    """流量查询。source 多来源；client=browser/other；q=URL/方法关键词搜索。"""
     db, _, _ = _get_services()
-    rows = list_traffic(db, limit, source, client)
+    rows = list_traffic(db, limit, source, client, q)
     db.close()
     return rows
 

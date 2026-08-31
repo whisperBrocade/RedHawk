@@ -458,6 +458,25 @@ def test_traffic_categories_multi_source(tmp_path):
     db.close()
 
 
+def test_list_traffic_search_q(tmp_path):
+    """q 关键词搜索：按 URL/方法过滤（流量记录/劫取的搜索功能）。"""
+    from redhawk.traffic_engine.recorder import list_traffic, save_traffic
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    save_traffic(db, "GET", "http://api.bank.com/v1/login", {}, "", 200, {}, "x", "proxy")
+    save_traffic(db, "POST", "http://api.bank.com/v1/pay", {}, "", 200, {}, "x", "proxy")
+    save_traffic(db, "GET", "http://cdn.cdn.net/logo.png", {}, "", 200, {}, "x", "proxy_https")
+
+    hit = list_traffic(db, limit=50, source="proxy,proxy_https", q="bank")
+    assert {r["url"] for r in hit} == {"http://api.bank.com/v1/login", "http://api.bank.com/v1/pay"}
+    hit2 = list_traffic(db, limit=50, source="proxy,proxy_https", q="POST")
+    assert [r["url"] for r in hit2] == ["http://api.bank.com/v1/pay"]
+    miss = list_traffic(db, limit=50, source="proxy,proxy_https", q="nonexistent")
+    assert miss == []
+    db.close()
+
+
 def test_upstream_proxy_from_settings_file(tmp_path, monkeypatch):
     """上游代理可从 data/settings.json 读取（桌面版双击 exe 无法设环境变量）。"""
     import json
