@@ -38,7 +38,8 @@ def load_settings() -> dict:
     try:
         p = settings_path()
         if p.exists():
-            data = json.loads(p.read_text(encoding="utf-8"))
+            # utf-8-sig：兼容记事本/PowerShell 写入的 BOM
+            data = json.loads(p.read_text(encoding="utf-8-sig"))
             return data if isinstance(data, dict) else {}
     except Exception:
         pass
