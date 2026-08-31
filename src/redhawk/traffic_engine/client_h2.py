@@ -192,18 +192,20 @@ class H2ClientConnection:
     # ---------- 上游侧 ----------
     async def _connect_upstream(self) -> bool:
         try:
-            ctx = ssl.create_default_context() if engine_config.upstream_verify() \
-                else ssl._create_unverified_context()
-            ctx.set_alpn_protocols(["h2"])
-            self.up_reader, self.up_writer = await asyncio.wait_for(
-                asyncio.open_connection(self._up_host, self._up_port,
-                                        ssl=ctx, server_hostname=self._up_host),
-                timeout=engine_config.CONN_TIMEOUT)
+            # 复用 open_upstream：支持 REDHAWK_UPSTREAM_PROXY（CONNECT 隧道）与直连，
+            # ALPN 协商 h2
+            from redhawk.traffic_engine.upstream import open_upstream
+            self.up_reader, self.up_writer, _via = await open_upstream(
+                self._up_host, self._up_port, True, alpn=["h2"])
         except Exception as e:
             log.debug("h2 upstream connect failed: %s", e)
             return False
-        if self.up_writer.get_extra_info("ssl_object").selected_alpn_protocol() != "h2":
-            log.debug("upstream %s:%s does not support h2", self._up_host, self._up_port)
+        try:
+            alpn = self.up_writer.get_extra_info("ssl_object").selected_alpn_protocol()
+        except Exception:
+            alpn = None
+        if alpn != "h2":
+            log.debug("upstream %s:%s alpn=%s (not h2)", self._up_host, self._up_port, alpn)
             return False
         cfg = h2.config.H2Configuration(client_side=True, header_encoding=None)
         self.upstream = h2.connection.H2Connection(config=cfg)

@@ -1,20 +1,23 @@
 """RedHawk v2 — W3 HTTP/2 测试。
 
 覆盖：
-- h2 解密端到端（httpx h2 客户端 → 代理 CONNECT → 上游 hypercorn h2）
+- h2 解密端到端（httpx h2 客户端 → 代理 CONNECT → 上游 h2 测试服务器）
 - h2 多路复用（同一连接并发多请求，记录无串扰）
 - 大 body 流式 blob（>2MB 响应全文落盘，traffic 表存摘要+引用）
+- h2 走上游代理（REDHAWK_UPSTREAM_PROXY CONNECT 隧道）
 """
 
 import asyncio
 import ipaddress
 import os
+import select
 import socket
 import ssl
 import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -290,4 +293,69 @@ def test_h2_large_body_blob(tmp_path, h2_server, monkeypatch):
     assert blob_row is not None
     assert os.path.exists(blob_row["path"])
     assert os.path.getsize(blob_row["path"]) == BIG_SIZE
+    db.close()
+
+
+# ================= h2 走上游代理（REDHAWK_UPSTREAM_PROXY CONNECT 隧道） =================
+class _ConnectProxyHandler(BaseHTTPRequestHandler):
+    """简易 CONNECT 隧道代理（h2 流量透传）。"""
+    protocol_version = "HTTP/1.1"
+    hits = 0
+
+    def log_message(self, *a):
+        pass
+
+    def do_CONNECT(self):
+        type(self).hits += 1
+        host, port = self.path.rsplit(":", 1)
+        self.send_response(200, "Connection Established")
+        self.end_headers()
+        self.wfile.flush()
+        up = socket.create_connection((host, int(port)), timeout=10)
+        self.connection.settimeout(5)
+        up.settimeout(5)
+        try:
+            while True:
+                r, _, _ = select.select([self.connection, up], [], [], 1)
+                if not r:
+                    continue
+                for s in r:
+                    try:
+                        data = s.recv(65536)
+                    except Exception:
+                        data = b""
+                    if not data:
+                        return
+                    (up if s is self.connection else self.connection).sendall(data)
+        finally:
+            up.close()
+
+
+@pytest.fixture()
+def connect_proxy():
+    srv = HTTPServer(("127.0.0.1", 0), _ConnectProxyHandler)
+    t = threading.Thread(target=srv.serve_forever, daemon=True)
+    t.start()
+    _ConnectProxyHandler.hits = 0
+    yield srv.server_address[1]
+    srv.shutdown()
+    srv.server_close()
+
+
+def test_h2_via_upstream_proxy(tmp_path, h2_server, connect_proxy, monkeypatch):
+    """h2 流量经 REDHAWK_UPSTREAM_PROXY（CONNECT 隧道）转发（修复 baidu 502 场景）。"""
+    import httpx
+
+    monkeypatch.setenv("REDHAWK_UPSTREAM_PROXY", f"http://127.0.0.1:{connect_proxy}")
+    p, db, ca_crt = _start_proxy_env(tmp_path, monkeypatch)
+    try:
+        with _h2_client(p.port, ca_crt) as c:
+            r = c.get(f"https://127.0.0.1:{h2_server}/via-proxy")
+            assert r.status_code == 200
+            assert "via-proxy" in r.text
+    finally:
+        p.stop()
+    assert _ConnectProxyHandler.hits >= 1, "h2 应经 CONNECT 隧道走上游代理"
+    row = db.query_one("SELECT * FROM traffic WHERE source='proxy_https' AND url LIKE '%/via-proxy'")
+    assert row is not None and row["proto"] == "http2"
     db.close()

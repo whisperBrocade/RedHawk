@@ -44,13 +44,15 @@ def _headers_to_dict(headers) -> dict:
     return {k.decode("latin-1"): v.decode("latin-1") for k, v in headers}
 
 
-async def open_upstream(host: str, port: int, tls: bool) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, bool]:
+async def open_upstream(host: str, port: int, tls: bool,
+                        alpn: list[str] | None = None) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, bool]:
     """建立上游连接。返回 (reader, writer, via_proxy)。
 
     优先走显式上游代理（REDHAWK_UPSTREAM_PROXY）：
       - 明文 HTTP：连接代理，请求行用绝对 URL（调用方处理）
       - HTTPS：连接代理 → CONNECT 隧道 → TLS 升级
     无代理时直连（tls=True 做客户端 TLS，默认校验证书）。
+    alpn：可选 ALPN 协议列表（如 ["h2"]，供 HTTP/2 上游协商）。
     """
     proxy = engine_config.upstream_proxy().strip()
     if proxy:
@@ -73,6 +75,8 @@ async def open_upstream(host: str, port: int, tls: bool) -> tuple[asyncio.Stream
                 ctx = ssl.create_default_context()
             else:
                 ctx = ssl._create_unverified_context()
+            if alpn:
+                ctx.set_alpn_protocols(alpn)
             await writer.start_tls(ctx, server_hostname=host)
         return reader, writer, True
 
@@ -82,6 +86,8 @@ async def open_upstream(host: str, port: int, tls: bool) -> tuple[asyncio.Stream
             ctx = ssl.create_default_context()
         else:
             ctx = ssl._create_unverified_context()
+        if alpn:
+            ctx.set_alpn_protocols(alpn)
         reader, writer = await asyncio.wait_for(
             asyncio.open_connection(host, port, ssl=ctx, server_hostname=host),
             timeout=engine_config.CONN_TIMEOUT,
