@@ -607,10 +607,11 @@
       <h3>🌐 出网代理（可选 · 需经代理才能访问外网时设置）</h3>
       <div style="font-size:12.5px;line-height:2.1;color:var(--dim)">
         <div><b style="color:var(--text)">什么时候需要？</b>本机必须经 HTTP 代理才能出网时（公司代理 / 科学上网工具如 7897 等）。此时 RedHawk 代理转发外网请求也必须走这条路，否则会<b style="color:var(--accent)">直连失败 → 大量 502</b>（浏览器/应用会自动重试，流量记录里出现同一 URL 连续多条 502，如微软 CDN 更新流量）。</div>
-        <div style="margin-top:4px"><b style="color:var(--accent)">设置方法</b>：启动前设置环境变量 <code style="background:var(--card);padding:1px 5px;border-radius:4px">REDHAWK_UPSTREAM_PROXY</code>（端口换成你的实际代理端口）：</div>
+        <div style="margin-top:4px"><b style="color:var(--accent)">设置方法</b>：<b style="color:var(--text)">源码/命令行</b>启动前设置环境变量 <code style="background:var(--card);padding:1px 5px;border-radius:4px">REDHAWK_UPSTREAM_PROXY</code>（端口换成你的实际代理端口）：</div>
         <div style="margin-top:4px"><b style="color:var(--text)">CMD：</b><code style="background:var(--card);padding:1px 5px;border-radius:4px">set REDHAWK_UPSTREAM_PROXY=http://127.0.0.1:7897 &amp;&amp; rh web</code></div>
         <div><b style="color:var(--text)">PowerShell：</b><code style="background:var(--card);padding:1px 5px;border-radius:4px">$env:REDHAWK_UPSTREAM_PROXY="http://127.0.0.1:7897"; rh web</code></div>
-        <div style="margin-top:4px">✅ 设置后外网流量经代理出网，不再 502；目标可直连时不设置也不受影响。清除该环境变量即恢复直连。</div>
+        <div style="margin-top:4px"><b style="color:var(--text)">独立版（桌面 exe）：</b>用记事本编辑 <code style="background:var(--card);padding:1px 5px;border-radius:4px">data\settings.json</code>，写入 <code style="background:var(--card);padding:1px 5px;border-radius:4px">{"upstream_proxy": "http://127.0.0.1:7897"}</code>（文件不存在则新建），保存后重启软件。</div>
+        <div style="margin-top:4px">✅ 设置后外网流量经代理出网，不再 502；目标可直连时不设置也不受影响。清除配置即恢复直连。</div>
       </div>
     </div>
 

@@ -458,6 +458,21 @@ def test_traffic_categories_multi_source(tmp_path):
     db.close()
 
 
+def test_upstream_proxy_from_settings_file(tmp_path, monkeypatch):
+    """上游代理可从 data/settings.json 读取（桌面版双击 exe 无法设环境变量）。"""
+    import json
+    from redhawk.traffic_engine import config as engine_config
+
+    monkeypatch.setenv("REDHAWK_DB", str(tmp_path / "t.db"))
+    monkeypatch.delenv("REDHAWK_UPSTREAM_PROXY", raising=False)
+    (tmp_path / "settings.json").write_text(
+        json.dumps({"upstream_proxy": "http://127.0.0.1:7897"}), encoding="utf-8")
+    assert engine_config.upstream_proxy() == "http://127.0.0.1:7897"
+    # 环境变量优先
+    monkeypatch.setenv("REDHAWK_UPSTREAM_PROXY", "http://127.0.0.1:9999")
+    assert engine_config.upstream_proxy() == "http://127.0.0.1:9999"
+
+
 def test_list_traffic_client_filter(tmp_path):
     """client=browser/other 按 User-Agent 区分用户浏览与后台自动流量。"""
     from redhawk.traffic_engine.recorder import list_traffic, save_traffic

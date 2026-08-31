@@ -6,7 +6,9 @@ blob/WS/SSE 相关配置随对应周次加入。
 
 from __future__ import annotations
 
+import json
 import os
+from pathlib import Path
 
 PROXY_HOST = os.environ.get("REDHAWK_PROXY_HOST", "127.0.0.1")
 PROXY_PORT = int(os.environ.get("REDHAWK_PROXY_PORT", "8888"))
@@ -23,13 +25,39 @@ RESP_TIMEOUT = float(os.environ.get("REDHAWK_RESP_TIMEOUT", "30"))
 IDLE_TIMEOUT = float(os.environ.get("REDHAWK_IDLE_TIMEOUT", "60"))
 
 
+def settings_path() -> Path:
+    """用户配置文件：<数据根>/settings.json（桌面版 exe 同目录 data/ 下）。"""
+    db_path = os.environ.get("REDHAWK_DB", "")
+    if db_path:
+        return Path(db_path).parent / "settings.json"
+    return Path(__file__).resolve().parent.parent.parent / "data" / "settings.json"
+
+
+def load_settings() -> dict:
+    """读取用户配置（settings.json）。文件缺失/损坏时返回空 dict。"""
+    try:
+        p = settings_path()
+        if p.exists():
+            data = json.loads(p.read_text(encoding="utf-8"))
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        pass
+    return {}
+
+
 def upstream_proxy() -> str:
     """上游代理地址（如 http://127.0.0.1:7897）。函数式读取，运行时生效。
+
+    优先级：环境变量 REDHAWK_UPSTREAM_PROXY → data/settings.json 的 upstream_proxy
+    （桌面版双击 exe 无法设环境变量，用配置文件配置）。
 
     代理自身转发时不能走系统代理（系统代理正指向本机 8888，会环回），
     需要出网代理时显式配置此项。
     """
-    return os.environ.get("REDHAWK_UPSTREAM_PROXY", "")
+    env = os.environ.get("REDHAWK_UPSTREAM_PROXY", "").strip()
+    if env:
+        return env
+    return str(load_settings().get("upstream_proxy", "")).strip()
 
 
 def upstream_verify() -> bool:
