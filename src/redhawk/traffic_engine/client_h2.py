@@ -268,17 +268,33 @@ class H2ClientConnection:
             meta = self._meta_by_up_sid(ev.stream_id)
             if meta is None:
                 return
-            meta.resp_ended = True
-            self.client.end_stream(meta.client_sid)
-            await self._flush_client()
-            self._record(meta)
-            self.streams.pop(meta.client_sid, None)
+            self._finish_stream(meta)
+        elif isinstance(ev, h2.events.TrailersReceived):
+            # 响应以 TRAILERS 帧结束（END_STREAM 在 trailer 上）：同样收尾记录
+            meta = self._meta_by_up_sid(ev.stream_id)
+            if meta is None:
+                return
+            log.debug("h2 trailers sid=%s", ev.stream_id)
+            self._finish_stream(meta)
         elif isinstance(ev, h2.events.StreamReset):
             meta = self._meta_by_up_sid(ev.stream_id)
             if meta is not None:
                 self._cleanup(meta.client_sid)
         elif isinstance(ev, h2.events.ConnectionTerminated):
             self._up_closed = True
+
+    def _finish_stream(self, meta: _StreamMeta) -> None:
+        """流响应结束：结束客户端流、组装记录、清理流映射（幂等）。"""
+        if meta.resp_ended:
+            return
+        meta.resp_ended = True
+        try:
+            self.client.end_stream(meta.client_sid)
+            asyncio.ensure_future(self._flush_client())
+        except Exception:
+            pass
+        self._record(meta)
+        self.streams.pop(meta.client_sid, None)
 
     def _meta_by_up_sid(self, up_sid: int) -> _StreamMeta | None:
         for m in self.streams.values():
