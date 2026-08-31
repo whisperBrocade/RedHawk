@@ -263,7 +263,11 @@ class UpstreamSession:
         """解析目标。MITM 场景（https_host 已定）直接用；否则按代理请求解析。"""
         if self.https_host:
             target = request.target.decode("latin-1")
-            url = f"https://{self.https_host}:{self.https_port}{target}"
+            # 默认端口（https 443）不写入 URL：https://www.4399.com/ 而非 ...:443/
+            if self.https_port == 443:
+                url = f"https://{self.https_host}{target}"
+            else:
+                url = f"https://{self.https_host}:{self.https_port}{target}"
             return self.https_host, self.https_port, True, target, url
 
         target = request.target.decode("latin-1")
