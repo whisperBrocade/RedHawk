@@ -49,9 +49,42 @@ class ProxyListener:
                 self._sys_proxy_taken = bool(r.get("ok", False))
                 if self._sys_proxy_taken:
                     self._sys_proxy_prev = r.get("previous")
+                    self._spawn_watchdog()
             except Exception:
                 self._sys_proxy_taken = False
                 self._sys_proxy_prev = None
+
+    def _spawn_watchdog(self) -> None:
+        """启动系统代理守护进程：主进程无论怎么退出都自动还原系统代理。
+
+        根治"关闭 RedHawk 后系统代理残留/后台代理"问题（强杀/崩溃时
+        shutdown 事件与 atexit 均不可靠）。
+        """
+        try:
+            import json as _json
+            import os
+            import subprocess
+            import sys as _sys
+            from pathlib import Path as _Path
+
+            parent = os.getpid()
+            parent_name = os.path.basename(_sys.executable).lower()
+            prev = _json.dumps(self._sys_proxy_prev or {"enabled": False, "server": ""})
+            if getattr(_sys, "frozen", False):
+                cmd = [_sys.executable, "--watchdog", str(parent), parent_name, prev]
+                cwd = None
+            else:
+                # 源码模式：cwd 指向包所在目录，保证 `-m redhawk.watchdog` 可找到
+                import redhawk as _rh
+                pkg_root = str(_Path(_rh.__file__).resolve().parent.parent)
+                cmd = [_sys.executable, "-m", "redhawk.watchdog",
+                       str(parent), parent_name, prev]
+                cwd = pkg_root
+            subprocess.Popen(cmd, cwd=cwd,
+                             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                             close_fds=True)
+        except Exception:
+            pass  # watchdog 启动失败不阻断主功能（优雅退出路径仍在）
 
     async def close(self) -> None:
         if self._server:

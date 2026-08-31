@@ -70,6 +70,12 @@ def stop_server() -> None:
 
 
 def main() -> None:
+    # 打包版守护进程入口：RedHawk.exe --watchdog <pid> <prev_json>
+    if len(sys.argv) > 1 and sys.argv[1] == "--watchdog":
+        from redhawk.watchdog import main as watchdog_main
+        watchdog_main()
+        return
+
     import webview
 
     # 启动前清理占用 7788/8888 的残留进程（防端口冲突）
@@ -92,9 +98,13 @@ def main() -> None:
     try:
         webview.start()
     finally:
+        # 停止 uvicorn（触发 FastAPI shutdown → 代理停止 → 系统代理还原）
         stop_server()
-    # 窗口全部关闭后退出进程
-    os._exit(0)
+        # 给 shutdown 事件留出执行时间（os._exit 会跳过清理）
+        import time
+        time.sleep(1.5)
+    # 正常退出（不强制 os._exit）：即使这里未走完，watchdog 也会兜底还原系统代理
+    sys.exit(0)
 
 
 if __name__ == "__main__":
