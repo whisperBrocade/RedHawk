@@ -477,6 +477,25 @@ def test_list_traffic_search_q(tmp_path):
     db.close()
 
 
+def test_list_traffic_search_q_order_by_position(tmp_path):
+    """搜索排序：同秒内关键词在 URL 位置靠前（域名段）优先。"""
+    from redhawk.traffic_engine.recorder import list_traffic, save_traffic
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    save_traffic(db, "GET", "https://www.baidu.com/s", {}, "", 200, {}, "x", "proxy")       # baidu 在域名
+    save_traffic(db, "GET", "https://cn.bing.com/baidu/feed", {}, "", 200, {}, "x", "proxy")  # baidu 在路径
+    # 统一为同一秒，验证纯按位置排序
+    with db.tx():
+        db.conn.execute("UPDATE traffic SET created_at='2026-09-01 10:00:00'")
+    rows = list_traffic(db, limit=50, source="proxy,proxy_https", q="baidu")
+    assert len(rows) == 2
+    assert rows[0]["url"] == "https://www.baidu.com/s", \
+        f"域名段匹配应靠前: {[r['url'] for r in rows]}"
+    assert rows[1]["url"] == "https://cn.bing.com/baidu/feed"
+    db.close()
+
+
 def test_upstream_proxy_from_settings_file(tmp_path, monkeypatch):
     """上游代理可从 data/settings.json 读取（桌面版双击 exe 无法设环境变量）。"""
     import json

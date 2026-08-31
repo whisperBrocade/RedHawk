@@ -146,7 +146,13 @@ def list_traffic(db: DB, limit: int = 50, source: str | None = None,
     sql = "SELECT id, method, url, status, source, created_at FROM traffic"
     if conds:
         sql += " WHERE " + " AND ".join(conds)
-    sql += " ORDER BY id DESC LIMIT ?"
+    if q and q.strip():
+        # 搜索排序：时间为主（新在前）；同时间（同秒）内关键词在 URL 位置越靠前
+        # （域名段优先，如 www.baidu.com 排在 .../baidu/... 前）越优先
+        sql += " ORDER BY created_at DESC, instr(lower(url), lower(?)) ASC, id DESC LIMIT ?"
+        params.append(q.strip())
+    else:
+        sql += " ORDER BY id DESC LIMIT ?"
     params.append(limit)
     return db.query(sql, tuple(params))
 
