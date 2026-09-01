@@ -477,6 +477,24 @@ def test_list_traffic_search_q(tmp_path):
     db.close()
 
 
+def test_save_traffic_error_marker(tmp_path):
+    """不完整记录（error 标记）可存储与读回（中断流保留方案）。"""
+    from redhawk.traffic_engine.recorder import list_traffic, save_traffic_retry
+
+    db = DB(tmp_path / "t.db")
+    db.init()
+    tid = save_traffic_retry(db, "GET", "http://x/", {}, "", 200, {}, "partial",
+                             "proxy", error="connection_closed")
+    assert tid is not None
+    row = db.query_one("SELECT * FROM traffic WHERE id=?", (tid,))
+    assert row["error"] == "connection_closed"
+    assert "partial" in row["resp_body"]
+    # 无 error 时为空
+    tid2 = save_traffic_retry(db, "GET", "http://y/", {}, "", 200, {}, "ok", "proxy")
+    assert db.query_one("SELECT error FROM traffic WHERE id=?", (tid2,))["error"] is None
+    db.close()
+
+
 def test_list_traffic_search_q_order_by_position(tmp_path):
     """搜索排序：同秒内关键词在 URL 位置靠前（域名段）优先。"""
     from redhawk.traffic_engine.recorder import list_traffic, save_traffic

@@ -20,7 +20,7 @@ from urllib.parse import urlparse
 import h11
 
 from redhawk.traffic_engine import config as engine_config
-from redhawk.traffic_engine.recorder import MAX_BODY, collect_body, save_traffic
+from redhawk.traffic_engine.recorder import MAX_BODY, collect_body, save_traffic_retry
 from redhawk.traffic_engine.stream_store import BlobWriter
 
 log = __import__("logging").getLogger("redhawk.traffic_engine.upstream")
@@ -367,10 +367,19 @@ class UpstreamSession:
                         self._record(status, resp_headers, resp_body,
                                      resp_blob_sha=resp_sha, resp_blob_size=resp_size)
                         return
-        except (asyncio.TimeoutError, ConnectionError, OSError):
+        except (asyncio.TimeoutError, ConnectionError, OSError) as e:
+            # 不丢弃已收响应体：finalize 落盘保留部分内容，并标记此条记录不完整
+            resp_sha = resp_size = None
             if resp_blob is not None:
-                resp_blob.abort()
+                try:
+                    resp_sha = resp_blob.finalize()
+                    resp_size = resp_blob.size
+                except Exception:
+                    log.debug("finalize partial resp blob failed", exc_info=True)
                 resp_blob = None
+            self._record(status, resp_headers, resp_body,
+                         resp_blob_sha=resp_sha, resp_blob_size=resp_size,
+                         error=f"upstream_incomplete:{type(e).__name__}")
             await self._send_502(client_conn, client_writer)
         finally:
             # 响应结束（或异常）：归还连接复用，无法复用则关闭
@@ -402,18 +411,18 @@ class UpstreamSession:
             pass
 
     def _record(self, status: int, resp_headers: dict, resp_body: str,
-                resp_blob_sha: str | None = None, resp_blob_size: int = 0) -> None:
-        try:
-            save_traffic(
-                self.db, self.meta["method"], self.meta["url"],
-                self.meta["req_headers"], self.meta["req_body"],
-                status, resp_headers, resp_body, self.source,
-                req_blob_sha=self.meta.get("req_blob_sha"),
-                resp_blob_sha=resp_blob_sha,
-                req_blob_size=self.meta.get("req_blob_size", 0),
-                resp_blob_size=resp_blob_size,
-                proto=self.meta.get("proto", "http1"),
-                http_version=self.meta.get("http_version"),
-            )
-        except Exception:
-            pass  # 记录失败不阻断转发（v1 同策略）
+                resp_blob_sha: str | None = None, resp_blob_size: int = 0,
+                error: str | None = None) -> None:
+        # 通过 save_traffic_retry 落库：重试一次，失败写 audit_logs，不再静默丢
+        save_traffic_retry(
+            self.db, self.meta["method"], self.meta["url"],
+            self.meta["req_headers"], self.meta["req_body"],
+            status, resp_headers, resp_body, self.source,
+            req_blob_sha=self.meta.get("req_blob_sha"),
+            resp_blob_sha=resp_blob_sha,
+            req_blob_size=self.meta.get("req_blob_size", 0),
+            resp_blob_size=resp_blob_size,
+            proto=self.meta.get("proto", "http1"),
+            http_version=self.meta.get("http_version"),
+            error=error,
+        )

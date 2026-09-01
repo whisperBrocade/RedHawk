@@ -11,9 +11,12 @@
 from __future__ import annotations
 
 import json
+import logging
 
 from redhawk.db import DB
 from redhawk.traffic_engine.stream_store import BlobWriter, blob_dir
+
+log = logging.getLogger("redhawk.traffic_engine.recorder")
 
 # 单条报文记录上限（v1 语义）。W3 起超过部分转 content-addressed blob。
 MAX_BODY = 2 * 1024 * 1024
@@ -81,10 +84,12 @@ def save_traffic(
     resp_blob_size: int = 0,
     proto: str = "http1",
     http_version: str | None = None,
+    error: str | None = None,
 ) -> int:
     """记录一条请求/响应到 traffic 表，返回 id。
 
     签名向后兼容 v1；大 body 场景传 blob sha/size（全文进 blob，表内存摘要）。
+    error 非空表示此条记录不完整（上游超时/流重置/连接关闭等），写入原因供排查。
     """
     data = {
         "method": method,
@@ -99,12 +104,50 @@ def save_traffic(
         "http_version": http_version,
         "req_blob_size": req_blob_size,
         "resp_blob_size": resp_blob_size,
+        "error": error,
     }
     if req_blob_sha:
         data["req_blob_id"] = register_blob(db, req_blob_sha, req_blob_size)
     if resp_blob_sha:
         data["resp_blob_id"] = register_blob(db, resp_blob_sha, resp_blob_size)
     return db.insert("traffic", data)
+
+
+def save_traffic_retry(db: DB, method: str, url: str, req_headers: dict,
+                       req_body: str, status: int, resp_headers: dict,
+                       resp_body: str, source: str = "proxy",
+                       req_blob_sha: str | None = None,
+                       resp_blob_sha: str | None = None,
+                       req_blob_size: int = 0,
+                       resp_blob_size: int = 0,
+                       proto: str = "http1",
+                       http_version: str | None = None,
+                       error: str | None = None) -> int | None:
+    """save_traffic + 一次重试 + 失败记审计：记录丢失不再静默。
+
+    DB 锁竞争 / IO 错误等偶发失败重试一次；仍失败则写 audit_logs
+    （actor='traffic_engine'，action='save_traffic_failed'，target=出错 URL），
+    不阻断转发。返回 traffic id 或 None。
+    """
+    last_exc: Exception | None = None
+    for attempt in (1, 2):
+        try:
+            return save_traffic(
+                db, method, url, req_headers, req_body, status, resp_headers,
+                resp_body, source, req_blob_sha=req_blob_sha,
+                resp_blob_sha=resp_blob_sha, req_blob_size=req_blob_size,
+                resp_blob_size=resp_blob_size, proto=proto,
+                http_version=http_version, error=error,
+            )
+        except Exception as e:
+            last_exc = e
+    try:
+        db.audit("traffic_engine", "save_traffic_failed", url[:2000],
+                 {"error": repr(last_exc), "method": method, "status": status})
+    except Exception:
+        log.warning("save_traffic failed and audit log also failed: %r",
+                    last_exc, exc_info=True)
+    return None
 
 
 def _client_conditions(client: str | None, params: list) -> str:

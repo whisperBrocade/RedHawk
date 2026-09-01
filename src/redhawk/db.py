@@ -153,7 +153,8 @@ CREATE TABLE IF NOT EXISTS traffic (
   req_blob_size INTEGER DEFAULT 0,
   resp_blob_size INTEGER DEFAULT 0,
   proto         TEXT DEFAULT 'http1',   -- http1 | http2 | ws_handshake | sse
-  http_version  TEXT                    -- 'HTTP/1.1' | 'HTTP/2'
+  http_version  TEXT,                   -- 'HTTP/1.1' | 'HTTP/2'
+  error         TEXT                    -- 非空=此条记录不完整（超时/流重置/连接关闭等），含原因
 );
 CREATE INDEX IF NOT EXISTS idx_traffic_ts ON traffic(created_at);
 
@@ -231,6 +232,7 @@ class DB:
             ("resp_blob_size", "INTEGER DEFAULT 0"),
             ("proto", "TEXT DEFAULT 'http1'"),
             ("http_version", "TEXT"),
+            ("error", "TEXT"),
         ):
             if name not in cols:
                 self.conn.execute(f"ALTER TABLE traffic ADD COLUMN {name} {ddl}")

@@ -62,12 +62,15 @@ def upstream_proxy() -> str:
 
 
 def upstream_verify() -> bool:
-    """上游 TLS 是否校验证书（默认开启；内网自签场景可置 0）。
+    """上游 TLS 是否校验证书（默认开启；内网自签/被拦截环境可关）。
 
-    函数式读取：环境变量在每次调用时生效（模块级常量在导入时冻结，
-    测试/运行时切换不生效）。
+    优先级：环境变量 REDHAWK_UPSTREAM_VERIFY → data/settings.json 的
+    upstream_verify（"0"/"false"/"no" 关闭）。
     """
-    return os.environ.get("REDHAWK_UPSTREAM_VERIFY", "1") != "0"
+    env = os.environ.get("REDHAWK_UPSTREAM_VERIFY", "").strip()
+    if env:
+        return env != "0"
+    return str(load_settings().get("upstream_verify", True)).lower() not in ("0", "false", "no")
 
 # Windows 网络探测流量过滤（迁移自 v1，防止健康检查污染流量日志）
 PROBE_KEYWORDS = (

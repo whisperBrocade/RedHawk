@@ -66,12 +66,17 @@ def _is_alive(pid: int, expected_name: str) -> bool:
 
 
 def main() -> None:
-    if len(sys.argv) < 4:
+    # 打包版经 desktop.py 转入：RedHawk.exe --watchdog <pid> <name> <json>，
+    # 此时 argv 仍带 "--watchdog" 标志，需跳过；源码版 python -m 无此标志
+    args = sys.argv[1:]
+    if args and args[0] == "--watchdog":
+        args = args[1:]
+    if len(args) < 3:
         sys.exit(2)
-    parent_pid = int(sys.argv[1])
-    expected_name = sys.argv[2].lower()
+    parent_pid = int(args[0])
+    expected_name = args[1].lower()
     try:
-        prev = json.loads(sys.argv[3])
+        prev = json.loads(args[2])
     except (ValueError, KeyError):
         prev = {"enabled": False, "server": ""}
 

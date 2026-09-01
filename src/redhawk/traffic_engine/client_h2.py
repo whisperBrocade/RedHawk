@@ -23,7 +23,7 @@ import h2.settings
 from h2.settings import SettingCodes
 
 from redhawk.traffic_engine import config as engine_config
-from redhawk.traffic_engine.recorder import MAX_BODY, collect_body, save_traffic
+from redhawk.traffic_engine.recorder import MAX_BODY, collect_body, save_traffic_retry
 from redhawk.traffic_engine.stream_store import BlobWriter
 from redhawk.traffic_engine.upstream import _headers_to_dict
 
@@ -309,25 +309,29 @@ class H2ClientConnection:
         else:
             meta.resp_body, meta.resp_blob = collect_body(meta.resp_body, meta.resp_blob, data)
 
-    def _record(self, meta: _StreamMeta) -> None:
-        try:
-            req_sha = req_size = None
-            if meta.req_blob is not None:
+    def _record(self, meta: _StreamMeta, error: str | None = None) -> None:
+        req_sha = req_size = None
+        if meta.req_blob is not None:
+            try:
                 req_sha = meta.req_blob.finalize()
                 req_size = meta.req_blob.size
-            resp_sha = resp_size = None
-            if meta.resp_blob is not None:
+            except Exception:
+                log.debug("h2 finalize req blob failed", exc_info=True)
+        resp_sha = resp_size = None
+        if meta.resp_blob is not None:
+            try:
                 resp_sha = meta.resp_blob.finalize()
                 resp_size = meta.resp_blob.size
-            save_traffic(
-                self.db, meta.method, meta.url, meta.req_headers, meta.req_body,
-                meta.status, meta.resp_headers, meta.resp_body, self.source,
-                req_blob_sha=req_sha, resp_blob_sha=resp_sha,
-                req_blob_size=req_size or 0, resp_blob_size=resp_size or 0,
-                proto="http2", http_version="HTTP/2",
-            )
-        except Exception:
-            log.debug("h2 record error", exc_info=True)
+            except Exception:
+                log.debug("h2 finalize resp blob failed", exc_info=True)
+        # 通过 save_traffic_retry 落库：重试一次，失败写 audit_logs，不再静默丢
+        save_traffic_retry(
+            self.db, meta.method, meta.url, meta.req_headers, meta.req_body,
+            meta.status, meta.resp_headers, meta.resp_body, self.source,
+            req_blob_sha=req_sha, resp_blob_sha=resp_sha,
+            req_blob_size=req_size or 0, resp_blob_size=resp_size or 0,
+            proto="http2", http_version="HTTP/2", error=error,
+        )
 
     # ---------- 工具 ----------
     async def _flush_upstream(self) -> None:
@@ -356,18 +360,13 @@ class H2ClientConnection:
         meta = self.streams.pop(sid, None)
         if meta is None:
             return
-        for b in (meta.req_blob, meta.resp_blob):
-            if b is not None:
-                b.abort()
+        # 不再 abort 丢弃：保留已收请求/响应体，标记流被重置后入库
+        self._record(meta, error="stream_reset")
 
     async def _close_all(self) -> None:
+        # 连接关闭时未完成的流：保留已收内容并标记原因，不再 abort 丢弃
         for m in self.streams.values():
-            for b in (m.req_blob, m.resp_blob):
-                if b is not None:
-                    try:
-                        b.abort()
-                    except Exception:
-                        pass
+            self._record(m, error="connection_closed")
         self.streams.clear()
         try:
             if self.up_writer:
