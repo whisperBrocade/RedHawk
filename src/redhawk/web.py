@@ -30,6 +30,9 @@ from redhawk.db import DB
 from redhawk.gatekeeper import Gatekeeper
 from redhawk.intercept import get_traffic, list_traffic
 from redhawk.orchestrator import Orchestrator
+from redhawk.traffic_engine.recorder import (
+    list_ws_messages, list_ws_rules, add_ws_rule, delete_ws_rule,
+)
 from redhawk.report import generate_report
 from redhawk import __version__
 
@@ -384,6 +387,75 @@ def repeater_parse(r: RawIn):
         return parse_raw_request(r.raw)
     except ValueError as e:
         raise HTTPException(400, str(e))
+
+
+# ---------------- WebSocket 消息/规则 ----------------
+class WsReplayIn(BaseModel):
+    url: str
+    opcode: str = "text"  # text | binary
+    payload: str
+
+
+@app.post("/api/ws/replay")
+async def ws_replay(r: WsReplayIn):
+    """连真实 WS 服务器（ws/wss），发一帧，收一帧响应。用于重放/探测。"""
+    from redhawk.traffic_engine.ws_relay import ws_client_send_and_receive, OP_TEXT, OP_BINARY
+    op = OP_BINARY if r.opcode == "binary" else OP_TEXT
+    result = await ws_client_send_and_receive(r.url, op, r.payload.encode("utf-8"))
+    if not result.get("ok"):
+        raise HTTPException(502, result.get("error", "WS 重放失败"))
+    return result
+
+
+@app.get("/api/ws/{traffic_id}/messages")
+def ws_messages_list(traffic_id: int):
+    """列出某条 WS 握手记录下的所有消息帧。"""
+    db, _, _ = _get_services()
+    rows = list_ws_messages(db, traffic_id)
+    db.close()
+    return {"messages": rows, "total": len(rows)}
+
+
+class WsRuleIn(BaseModel):
+    name: str = ""
+    direction: str = ""        # client_to_server | server_to_client | 空=双向
+    opcode: str = ""           # text | binary | 空=任意
+    match_contains: str = ""   # payload 含此关键字则命中（空=匹配所有）
+    action: str = "modify"     # modify | drop
+    replace_text: str = ""
+    enabled: int = 1
+
+
+@app.get("/api/ws/rules")
+def ws_rules_list():
+    """列出所有 WS 篡改/丢弃规则（对新连接生效）。"""
+    db, _, _ = _get_services()
+    rows = list_ws_rules(db)
+    db.close()
+    return {"rules": rows}
+
+
+@app.post("/api/ws/rules")
+def ws_rules_add(r: WsRuleIn):
+    db, _, _ = _get_services()
+    try:
+        rid = add_ws_rule(db, r.name, r.direction, r.opcode, r.match_contains,
+                          r.action, r.replace_text, r.enabled)
+        db.audit("web", "ws_rule_add", "", {"rule_id": rid, "action": r.action})
+        db.close()
+        return {"id": rid}
+    except Exception as e:
+        db.close()
+        raise HTTPException(400, str(e))
+
+
+@app.delete("/api/ws/rules/{rule_id}")
+def ws_rules_delete(rule_id: int):
+    db, _, _ = _get_services()
+    n = delete_ws_rule(db, rule_id)
+    db.audit("web", "ws_rule_delete", str(rule_id), {"deleted": n})
+    db.close()
+    return {"deleted": n}
 
 
 # ---------------- 漏洞复现报告 ----------------

@@ -236,10 +236,17 @@ class UpstreamSession:
 
         conn = self._conn.h11
         headers = [(k, v) for k, v in request.headers if k.lower() not in HOP_BY_HOP]
+        # WebSocket 升级请求：保留 Connection/Upgrade 等逐跳头（否则上游不会回 101）
+        if _get_header(request.headers, "upgrade").lower() == "websocket":
+            headers = list(request.headers)
+            if _get_header(request.headers, "connection").lower() != "upgrade":
+                headers.append((b"connection", b"upgrade"))
         # 明文 HTTP 走上游代理时，请求行必须用绝对 URL（RFC 7230 absolute-form）
         target_for_send = target_path
         if self._conn.via_proxy and not tls:
-            target_for_send = f"http://{host}:{port}{target_path}"
+            # WS 升级请求按 RFC 6455 用 ws:// 绝对形式；普通请求转 http://
+            if _get_header(request.headers, "upgrade").lower() != "websocket":
+                target_for_send = f"http://{host}:{port}{target_path}"
             headers.append((b"proxy-connection", b"keep-alive"))
         try:
             out = conn.send(h11.Request(
@@ -271,12 +278,20 @@ class UpstreamSession:
             return self.https_host, self.https_port, True, target, url
 
         target = request.target.decode("latin-1")
-        if target.startswith("http://"):
+        low = target.lower()
+        # 绝对形式（RFC 7230/6455）：http(s) 与 WebSocket 的 ws(s)
+        if low.startswith(("http://", "ws://")):
             u = urlparse(target)
             path = u.path or "/"
             if u.query:
                 path += "?" + u.query
             return u.hostname or "127.0.0.1", u.port or 80, False, path, target
+        if low.startswith(("https://", "wss://")):
+            u = urlparse(target)
+            path = u.path or "/"
+            if u.query:
+                path += "?" + u.query
+            return u.hostname or "127.0.0.1", u.port or 443, True, path, target
 
         host_hdr = _get_header(request.headers, "host") or "127.0.0.1"
         if ":" in host_hdr and host_hdr.count(":") == 1:
@@ -311,9 +326,12 @@ class UpstreamSession:
             await self._conn.writer.drain()
 
     # ---------- 响应侧 ----------
-    async def relay_response(self, client_conn: h11.Connection, client_writer: asyncio.StreamWriter) -> None:
+    async def relay_response(self, client_conn: h11.Connection,
+                             client_writer: asyncio.StreamWriter) -> bool:
         """读取上游响应，转发回客户端（h11 SERVER），完成后入库并归还连接。
 
+        检测 101 + Upgrade: websocket：握手透传后返回 True，由调用方调
+        relay_ws 接管双向 WS 帧中继；此时上游连接保留不归还。
         body 记录策略：前 MAX_BODY 进 traffic 表（快查摘要），
         超限部分全文进 content-addressed blob（边收边写，不截断）。
         """
@@ -321,6 +339,7 @@ class UpstreamSession:
         resp_headers: dict = {}
         resp_body = ""
         resp_blob: BlobWriter | None = None
+        ws_upgrade = False
         try:
             while True:
                 data = await asyncio.wait_for(
@@ -333,10 +352,43 @@ class UpstreamSession:
                         event = self._conn.h11.next_event()
                     except h11.RemoteProtocolError:
                         await self._send_502(client_conn, client_writer)
-                        return
+                        return False
                     if event is h11.NEED_DATA or event is h11.PAUSED:
                         break
                     if isinstance(event, h11.InformationalResponse):
+                        if event.status_code == 101:
+                            # WebSocket 握手：h11 把 101（status<200）当 InformationalResponse
+                            # 送达，且其后不再有 EndOfMessage（PAUSED），必须在此立即
+                            # 完成透传 + 落库 + 交接；回传也必须是 InformationalResponse
+                            #（h11.Response 校验拒绝 status=101，LocalProtocolError）。
+                            status = 101
+                            resp_headers = _headers_to_dict(event.headers)
+                            # 保留 Upgrade/Connection 等头，不过滤逐跳头
+                            out = client_conn.send(h11.InformationalResponse(
+                                status_code=101, headers=list(event.headers)))
+                            if out:
+                                client_writer.write(out)
+                                await client_writer.drain()
+                            resp_sha = resp_size = None
+                            if resp_blob is not None:
+                                try:
+                                    resp_sha = resp_blob.finalize()
+                                    resp_size = resp_blob.size
+                                except Exception:
+                                    log.debug("finalize resp blob failed", exc_info=True)
+                                resp_blob = None
+                            tid = self._record(status, resp_headers, resp_body,
+                                               resp_blob_sha=resp_sha, resp_blob_size=resp_size,
+                                               proto="ws_handshake", http_version="HTTP/1.1")
+                            self.meta["traffic_id"] = tid
+                            # h11 缓冲中可能已含紧随 101 的 WS 帧字节（同一 TCP 段），
+                            # 取回交给 relay_ws 预置进解析缓冲，避免丢帧
+                            try:
+                                self.meta["ws_trailing_up"], _ = self._conn.h11.trailing_data
+                            except Exception:
+                                self.meta["ws_trailing_up"] = b""
+                            ws_upgrade = True
+                            return True
                         # 100-continue 等中间响应透传
                         out = client_conn.send(h11.InformationalResponse(
                             status_code=event.status_code, headers=event.headers))
@@ -345,28 +397,39 @@ class UpstreamSession:
                     elif isinstance(event, h11.Response):
                         status = event.status_code
                         resp_headers = _headers_to_dict(event.headers)
+                        # 注：101 不会以 h11.Response 到达（h11 按 status<200 分发），
+                        # 普通响应正常过滤逐跳头转发
                         hdrs = [(k, v) for k, v in event.headers if k.lower() not in HOP_BY_HOP]
                         out = client_conn.send(h11.Response(status_code=event.status_code, headers=hdrs))
                         if out:
                             client_writer.write(out)
                     elif isinstance(event, h11.Data):
-                        out = client_conn.send(h11.Data(data=event.data))
-                        if out:
-                            client_writer.write(out)
+                        if not ws_upgrade:
+                            out = client_conn.send(h11.Data(data=event.data))
+                            if out:
+                                client_writer.write(out)
                         resp_body, resp_blob = collect_body(resp_body, resp_blob, event.data)
                     elif isinstance(event, h11.EndOfMessage):
-                        out = client_conn.send(h11.EndOfMessage())
-                        if out:
-                            client_writer.write(out)
-                        await client_writer.drain()
+                        if not ws_upgrade:
+                            out = client_conn.send(h11.EndOfMessage())
+                            if out:
+                                client_writer.write(out)
+                            await client_writer.drain()
                         resp_sha = resp_size = None
                         if resp_blob is not None:
-                            resp_sha = resp_blob.finalize()
-                            resp_size = resp_blob.size
+                            try:
+                                resp_sha = resp_blob.finalize()
+                                resp_size = resp_blob.size
+                            except Exception:
+                                log.debug("finalize resp blob failed", exc_info=True)
                             resp_blob = None
-                        self._record(status, resp_headers, resp_body,
-                                     resp_blob_sha=resp_sha, resp_blob_size=resp_size)
-                        return
+                        proto = "ws_handshake" if ws_upgrade else self.meta.get("proto", "http1")
+                        tid = self._record(status, resp_headers, resp_body,
+                                           resp_blob_sha=resp_sha, resp_blob_size=resp_size,
+                                           proto=proto, http_version="HTTP/1.1")
+                        if ws_upgrade:
+                            self.meta["traffic_id"] = tid
+                        return ws_upgrade
         except (asyncio.TimeoutError, ConnectionError, OSError) as e:
             # 不丢弃已收响应体：finalize 落盘保留部分内容，并标记此条记录不完整
             resp_sha = resp_size = None
@@ -381,12 +444,43 @@ class UpstreamSession:
                          resp_blob_sha=resp_sha, resp_blob_size=resp_size,
                          error=f"upstream_incomplete:{type(e).__name__}")
             await self._send_502(client_conn, client_writer)
+            return False
         finally:
-            # 响应结束（或异常）：归还连接复用，无法复用则关闭
-            c = self._conn
-            self._conn = None
-            if c is not None and not self.pool.try_release(c):
+            if ws_upgrade:
+                # 上游连接保留给 relay_ws 接管（不归还池）
+                pass
+            else:
+                c = self._conn
+                self._conn = None
+                if c is not None and not self.pool.try_release(c):
+                    await c.close()
+
+    async def relay_ws(self, client_reader: asyncio.StreamReader,
+                       client_writer: asyncio.StreamWriter,
+                       client_trailing: bytes = b"") -> None:
+        """101 之后接管双向 WS 帧中继：解析/记录/规则篡改/转发。
+
+        client_trailing：客户端侧 h11 缓冲中已读到的首帧字节（与升级请求
+        同段到达时）；上游侧缓冲字节由 relay_response 存入 meta。
+        """
+        c = self._conn
+        self._conn = None
+        if c is None:
+            return
+        tid = self.meta.get("traffic_id")
+        up_trailing = self.meta.get("ws_trailing_up") or b""
+        try:
+            from redhawk.traffic_engine.ws_relay import WsRelay
+            relay = WsRelay(self.db, tid, self.meta.get("url", ""))
+            await relay.relay(client_reader, client_writer, c.reader, c.writer,
+                              client_trailing=client_trailing, up_trailing=up_trailing)
+        except Exception:
+            log.debug("ws relay error", exc_info=True)
+        finally:
+            try:
                 await c.close()
+            except Exception:
+                pass
 
     async def _discard(self) -> None:
         """请求侧失败：关闭连接，不归还池。"""
@@ -412,9 +506,10 @@ class UpstreamSession:
 
     def _record(self, status: int, resp_headers: dict, resp_body: str,
                 resp_blob_sha: str | None = None, resp_blob_size: int = 0,
-                error: str | None = None) -> None:
+                error: str | None = None, proto: str | None = None,
+                http_version: str | None = None) -> int | None:
         # 通过 save_traffic_retry 落库：重试一次，失败写 audit_logs，不再静默丢
-        save_traffic_retry(
+        return save_traffic_retry(
             self.db, self.meta["method"], self.meta["url"],
             self.meta["req_headers"], self.meta["req_body"],
             status, resp_headers, resp_body, self.source,
@@ -422,7 +517,7 @@ class UpstreamSession:
             resp_blob_sha=resp_blob_sha,
             req_blob_size=self.meta.get("req_blob_size", 0),
             resp_blob_size=resp_blob_size,
-            proto=self.meta.get("proto", "http1"),
-            http_version=self.meta.get("http_version"),
+            proto=proto or self.meta.get("proto", "http1"),
+            http_version=http_version or self.meta.get("http_version"),
             error=error,
         )

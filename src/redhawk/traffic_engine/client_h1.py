@@ -80,7 +80,16 @@ class H1ClientConnection:
                     elif isinstance(event, h11.EndOfMessage):
                         if up is not None:
                             await up.end_request()
-                            await up.relay_response(conn, writer)
+                            ws = await up.relay_response(conn, writer)
+                            if ws:
+                                # WebSocket：握手透传完成，接管双向帧中继
+                                # 之后整个连接结束（WS 不走 HTTP keep-alive）
+                                try:
+                                    trailing, _ = conn.trailing_data
+                                except Exception:
+                                    trailing = b""
+                                await up.relay_ws(reader, writer, client_trailing=trailing)
+                                return
                             # relay_response 内部已归还/关闭上游连接
                             up = None
                             # 一个请求-响应循环完成：准备下一个（keep-alive）

@@ -27,7 +27,7 @@ a = Analysis(
         "redhawk.traffic_engine.recorder", "redhawk.traffic_engine.upstream",
         "redhawk.traffic_engine.client_h1", "redhawk.traffic_engine.listener",
         "redhawk.traffic_engine.client_h2", "redhawk.traffic_engine.server",
-        "redhawk.traffic_engine.stream_store",
+        "redhawk.traffic_engine.stream_store", "redhawk.traffic_engine.ws_relay",
         "redhawk.watchdog",
         "h11", "h11._connection", "h11._events", "h11._headers",
         "h11._readers", "h11._receivebuffer", "h11._state",

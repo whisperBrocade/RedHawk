@@ -202,3 +202,37 @@ def list_traffic(db: DB, limit: int = 50, source: str | None = None,
 
 def get_traffic(db: DB, traffic_id: int) -> dict | None:
     return db.query_one("SELECT * FROM traffic WHERE id=?", (traffic_id,))
+
+
+# ================= WebSocket 消息/规则 =================
+def list_ws_messages(db: DB, traffic_id: int) -> list[dict]:
+    """某条 WS 握手记录下的所有消息帧。"""
+    return db.query(
+        "SELECT id, traffic_id, direction, opcode, payload, fin, created_at "
+        "FROM ws_messages WHERE traffic_id=? ORDER BY id", (traffic_id,))
+
+
+def list_ws_rules(db: DB) -> list[dict]:
+    """所有 WS 篡改/丢弃规则。"""
+    return db.query(
+        "SELECT id, name, direction, opcode, match_contains, action, replace_text, enabled, created_at "
+        "FROM ws_intercept_rules ORDER BY id DESC")
+
+
+def add_ws_rule(db: DB, name: str = "", direction: str = "", opcode: str = "",
+               match_contains: str = "", action: str = "modify",
+               replace_text: str = "", enabled: int = 1) -> int:
+    """新增一条 WS 拦截规则。返回规则 id。"""
+    return db.insert("ws_intercept_rules", {
+        "name": name, "direction": direction, "opcode": opcode,
+        "match_contains": match_contains, "action": action,
+        "replace_text": replace_text, "enabled": enabled,
+    })
+
+
+def delete_ws_rule(db: DB, rule_id: int) -> int:
+    """删除一条规则。返回受影响行数。"""
+    with db._lock:
+        cur = db.conn.execute("DELETE FROM ws_intercept_rules WHERE id=?", (rule_id,))
+        db.conn.commit()
+        return cur.rowcount

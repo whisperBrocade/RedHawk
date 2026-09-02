@@ -201,6 +201,29 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   ip            TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_logs(ts);
+
+CREATE TABLE IF NOT EXISTS ws_messages (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  traffic_id    INTEGER REFERENCES traffic(id),
+  direction     TEXT NOT NULL,        -- client_to_server | server_to_client
+  opcode        TEXT NOT NULL,         -- text | binary | close | ping | pong
+  payload       TEXT,                  -- text帧=解码字符串；binary/控制帧=hex
+  fin           INTEGER DEFAULT 1,
+  created_at    TEXT DEFAULT (datetime('now','localtime'))
+);
+CREATE INDEX IF NOT EXISTS idx_wsmsg_traffic ON ws_messages(traffic_id);
+
+CREATE TABLE IF NOT EXISTS ws_intercept_rules (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  name          TEXT,
+  direction     TEXT,                 -- client_to_server | server_to_client | 空=双向
+  opcode        TEXT,                 -- text | binary | 空=任意opcode
+  match_contains TEXT,                -- payload 含此关键字则命中（空=匹配所有）
+  action        TEXT NOT NULL,         -- modify | drop
+  replace_text  TEXT,                 -- action=modify 时的替换 payload（UTF-8 文本）
+  enabled       INTEGER DEFAULT 1,
+  created_at    TEXT DEFAULT (datetime('now','localtime'))
+);
 """
 
 
